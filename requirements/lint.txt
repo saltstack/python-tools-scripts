@@ -1,0 +1,8 @@
+-r base.txt
+-r tests.txt
+black
+reorder-python-imports
+flake8 >= 5.0.4
+flake8-mypy-fork
+flake8-docstrings
+flake8-typing-imports
