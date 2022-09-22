@@ -1,0 +1,8 @@
+-   id: tools
+    name: tools
+    entry: tools
+    language: python
+    types: [file]
+    args: []
+    require_serial: true
+    additional_dependencies: []
