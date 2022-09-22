@@ -130,3 +130,6 @@ dmypy.json
 
 # Vim/NVim backups
 *\.*~
+
+# Ignore auto generated version file
+src/ptscripts/version.py
