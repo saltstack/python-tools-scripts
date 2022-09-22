@@ -51,11 +51,27 @@ def create(
     """
     vm = VM(ctx=ctx, name=name)
     vm.create(region_name=region, key_name=key_name, instance_type=instance_type)
+
+
+@vm.command(
+    arguments={
+        "name": {
+            "help": "The VM Name",
+            "metavar": "VM_NAME",
+        },
+    }
+)
+def destroy(ctx: Context, name: str):
+    """
+    Destroy VM.
+    """
+    vm = VM(ctx=ctx, name=name)
+    vm.destroy()
 ```
 
 The, on your repository root, run:
 
-```shell
+```
 ❯ tools -h
 usage: tools [-h] [--debug] {vm} ...
 
@@ -72,7 +88,7 @@ Commands:
 These tools are discovered under `<repo-root>/tools`.
 ```
 
-```shell
+```
 ❯ tools vm -h
 usage: tools vm [-h] {create,destroy} ...
 
