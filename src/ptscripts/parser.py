@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import logging
+import os
 import pathlib
 import sys
 import typing
@@ -70,14 +71,20 @@ class Context:
                 "exit-failure": "bold red",
             }
         )
-        self.console = Console(stderr=True, theme=theme)
+        console_kwargs = {
+            "theme": theme,
+        }
+        if os.environ.get("CI"):
+            console_kwargs["force_terminal"] = True
+            console_kwargs["force_interactive"] = False
+        self.console = Console(sterr=True, **console_kwargs)
+        self.console_stdout = Console(**console_kwargs)
 
     def print(self, *args, **kwargs):
         """
         Print to stdout.
         """
-        with self.console.screen(stderr=False) as console:
-            console.print(*args, **kwargs)
+        self.console_stdout.print(*args, **kwargs)
 
     def debug(self, *args):
         """
