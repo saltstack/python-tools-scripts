@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.9.0rc2 (2022-09-30)
+=====================
+
+Bug Fixes
+---------
+
+- Properly handle CI environment terminals (`#1 <https://github.com/saltstack/python-tools-scripts/issues/1>`_)
+
+
 0.9.0rc1 (2022-09-22)
 =====================
 
