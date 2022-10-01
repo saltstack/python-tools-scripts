@@ -77,7 +77,7 @@ class Context:
         if os.environ.get("CI"):
             console_kwargs["force_terminal"] = True
             console_kwargs["force_interactive"] = False
-        self.console = Console(sterr=True, **console_kwargs)
+        self.console = Console(stderr=True, **console_kwargs)
         self.console_stdout = Console(**console_kwargs)
 
     def print(self, *args, **kwargs):
