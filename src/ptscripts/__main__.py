@@ -3,24 +3,9 @@ from __future__ import annotations
 import logging
 import sys
 
-from rich.console import Console
-from rich.logging import RichHandler
-
 from ptscripts.parser import Parser
 
-FORMAT = "%(message)s"
-logging.basicConfig(
-    level=logging.INFO,
-    format=FORMAT,
-    datefmt="[%X]",
-    handlers=[
-        RichHandler(
-            console=Console(stderr=True),
-            markup=True,
-            rich_tracebacks=True,
-        ),
-    ],
-)
+log = logging.getLogger(__name__)
 
 
 def main():
@@ -29,6 +14,7 @@ def main():
     """
     parser = Parser()
     cwd = str(parser.repo_root)
+    log.debug(f"Searching for tools in {cwd}")
     if cwd in sys.path:
         sys.path.remove(cwd)
     sys.path.insert(0, cwd)

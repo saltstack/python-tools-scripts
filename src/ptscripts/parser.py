@@ -18,8 +18,11 @@ from typing import cast
 from typing import TYPE_CHECKING
 from typing import TypedDict
 
+import rich
 from rich.console import Console
 from rich.theme import Theme
+
+from ptscripts import logs
 
 if TYPE_CHECKING:
     from argparse import ArgumentParser
@@ -69,6 +72,8 @@ class Context:
                 "log-error": "bold red",
                 "exit-ok": "green",
                 "exit-failure": "bold red",
+                "logging.level.stdout": "dim blue",
+                "logging.level.stderr": "dim red",
             }
         )
         console_kwargs = {
@@ -79,6 +84,7 @@ class Context:
             console_kwargs["force_interactive"] = False
         self.console = Console(stderr=True, **console_kwargs)
         self.console_stdout = Console(**console_kwargs)
+        rich.reconfigure(stderr=True, **console_kwargs)
 
     def print(self, *args, **kwargs):
         """
@@ -148,16 +154,33 @@ class Parser:
                 epilog="These tools are discovered under `<repo-root>/tools`.",
                 allow_abbrev=False,
             )
-            group = instance.parser.add_mutually_exclusive_group()
-            # group.add_argument(
-            #    "--quiet",
-            #    "-q",
-            #    dest="quiet",
-            #    action="store_true",
-            #    default=False,
-            #    help="Show info messages",
-            # )
-            group.add_argument(
+            log_group = instance.parser.add_argument_group("Logging")
+            timestamp_meg = log_group.add_mutually_exclusive_group()
+            timestamp_meg.add_argument(
+                "--timestamps",
+                "--ts",
+                action="store_true",
+                help="Add time stamps to logs",
+                dest="timestamps",
+            )
+            timestamp_meg.add_argument(
+                "--no-timestamps",
+                "--nts",
+                action="store_false",
+                default=True,
+                help="Remove time stamps from logs",
+                dest="timestamps",
+            )
+            level_group = log_group.add_mutually_exclusive_group()
+            level_group.add_argument(
+                "--quiet",
+                "-q",
+                dest="quiet",
+                action="store_true",
+                default=False,
+                help="Disable logging",
+            )
+            level_group.add_argument(
                 "--debug",
                 "-d",
                 action="store_true",
@@ -176,12 +199,19 @@ class Parser:
         Parse CLI.
         """
         options = self.parser.parse_args()
-        self.options = options
-        logging.root.setLevel(logging.INFO)
-        if options.debug:
+        if options.quiet:
+            logging.root.setLevel(logging.CRITICAL + 1)
+        elif options.debug:
             logging.root.setLevel(logging.DEBUG)
-        # elif options.quiet:
-        #    logging.root.setLevel(logging.FATAL)
+        else:
+            logging.root.setLevel(logging.INFO)
+        if options.timestamps:
+            for handler in logging.root.handlers:
+                handler.setFormatter(logs.TIMESTAMP_FORMATTER)
+        else:
+            for handler in logging.root.handlers:
+                handler.setFormatter(logs.NO_TIMESTAMP_FORMATTER)
+        self.options = options
         if "func" not in options:
             self.context.exit(1, "No command was passed.")
         log.debug(f"CLI parsed options {options}")
@@ -327,6 +357,7 @@ class CommandGroup:
             flags = kwargs.pop("flags", None)  # type: ignore[misc]
             if flags is None:
                 flags = [f"--{parameter.name.replace('_', '-')}"]
+            log.debug("Adding Command %r. Flags: %s; KwArgs: %s", name, flags, kwargs)
             command.add_argument(*flags, **kwargs)
         command.set_defaults(func=partial(self, func))
         return func
