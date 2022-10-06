@@ -11,6 +11,7 @@ import pathlib
 import sys
 import typing
 from functools import partial
+from subprocess import CompletedProcess
 from types import FunctionType
 from types import GenericAlias
 from typing import Any
@@ -23,6 +24,7 @@ from rich.console import Console
 from rich.theme import Theme
 
 from ptscripts import logs
+from ptscripts import process
 
 if TYPE_CHECKING:
     from argparse import ArgumentParser
@@ -128,6 +130,23 @@ class Context:
             self.console.print(message, style=style)
         self.parser.exit(status)
 
+    def run(
+        self,
+        *cmdline,
+        check=True,
+        no_output_timeout_secs: int | None = None,
+        capture: bool = False,
+    ) -> CompletedProcess[str]:
+        """
+        Run a subprocess.
+        """
+        return process.run(
+            *cmdline,
+            check=check,
+            no_output_timeout_secs=no_output_timeout_secs,
+            capture=capture,
+        )
+
 
 class Parser:
     """
@@ -186,6 +205,18 @@ class Parser:
                 action="store_true",
                 default=False,
                 help="Show debug messages",
+            )
+            run_options = instance.parser.add_argument_group(
+                "Run Subprocess Options", description="These options apply to ctx.run() calls"
+            )
+            run_options.add_argument(
+                "--no-output-timeout-secs",
+                "--nots",
+                default=None,
+                type=int,
+                help="Timeout if no output has been seen for the provided seconds.",
+                metavar="SECONDS",
+                dest="no_output_timeout_secs",
             )
 
             instance.subparsers = instance.parser.add_subparsers(
