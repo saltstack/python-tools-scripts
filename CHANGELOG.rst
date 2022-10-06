@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.9.0rc5 (2022-10-06)
+=====================
+
+Improvements
+------------
+
+- Provide a `run()` method to `ctx` to run subprocesses. (`#4 <https://github.com/s0undt3ch/python-tools-scripts/issues/4>`_)
+
+
 0.9.0rc4 (2022-10-06)
 =====================
 
