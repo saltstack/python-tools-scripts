@@ -19,7 +19,7 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 Improvements
 ------------
 
-- Several improvements with logging (`#3 <https://github.com/saltstack/python-tools-scripts/issues/3>`_)
+- Several improvements with logging (`#3 <https://github.com/s0undt3ch/python-tools-scripts/issues/3>`_)
 
 
 0.9.0rc3 (2022-10-01)
@@ -28,7 +28,7 @@ Improvements
 Bug Fixes
 ---------
 
-- Fix typo in keyword argument (`#2 <https://github.com/saltstack/python-tools-scripts/issues/2>`_)
+- Fix typo in keyword argument (`#2 <https://github.com/s0undt3ch/python-tools-scripts/issues/2>`_)
 
 
 0.9.0rc2 (2022-09-30)
@@ -37,7 +37,7 @@ Bug Fixes
 Bug Fixes
 ---------
 
-- Properly handle CI environment terminals (`#1 <https://github.com/saltstack/python-tools-scripts/issues/1>`_)
+- Properly handle CI environment terminals (`#1 <https://github.com/s0undt3ch/python-tools-scripts/issues/1>`_)
 
 
 0.9.0rc1 (2022-09-22)

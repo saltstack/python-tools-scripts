@@ -11,7 +11,7 @@ package = "ptscripts"
 filename = "CHANGELOG.rst"
 directory = "changelog/"
 title_format = "{version} ({project_date})"
-issue_format = "`#{issue} <https://github.com/saltstack/python-tools-scripts/issues/{issue}>`_"
+issue_format = "`#{issue} <https://github.com/s0undt3ch/python-tools-scripts/issues/{issue}>`_"
 
   [[tool.towncrier.type]]
   directory = "breaking"
