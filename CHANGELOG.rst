@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.9.0 (2022-10-07)
+==================
+
+Improvements
+------------
+
+- When a function has a keyword argument with a boolean default, the parser now automatically creates the `store_true` or `store_false` action(if not action was provided in the `arguments` keyword definition. (`#5 <https://github.com/s0undt3ch/python-tools-scripts/issues/5>`_)
+
+
 0.9.0rc5 (2022-10-06)
 =====================
 
