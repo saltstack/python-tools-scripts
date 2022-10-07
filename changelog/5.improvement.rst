@@ -1,0 +1,1 @@
+When a function has a keyword argument with a boolean default, the parser now automatically creates the `store_true` or `store_false` action(if not action was provided in the `arguments` keyword definition.

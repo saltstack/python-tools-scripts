@@ -377,8 +377,17 @@ class CommandGroup:
             # Keyword argument
             kwargs["dest"] = parameter.name
             if "type" not in kwargs:
-                if param_type not in (bool,):
+                if param_type is not bool:
                     kwargs["type"] = param_type
+                elif "action" not in kwargs:
+                    action = None
+                    if parameter.default is True:
+                        action = "store_false"
+                    elif parameter.default is False:
+                        action = "store_true"
+                    if action is not None:
+                        kwargs["action"] = action
+
             kwargs["default"] = parameter.default
             if "help" in kwargs:
                 if parameter.default is not None:
