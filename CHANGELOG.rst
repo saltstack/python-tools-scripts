@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.9.1 (2022-10-09)
+==================
+
+Improvements
+------------
+
+- Provide helper `chdir` method on the context object. (`#6 <https://github.com/s0undt3ch/python-tools-scripts/issues/6>`_)
+
+
 0.9.0 (2022-10-07)
 ==================
 
