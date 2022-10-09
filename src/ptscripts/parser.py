@@ -10,6 +10,8 @@ import os
 import pathlib
 import sys
 import typing
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import partial
 from subprocess import CompletedProcess
 from types import FunctionType
@@ -146,6 +148,21 @@ class Context:
             no_output_timeout_secs=no_output_timeout_secs,
             capture=capture,
         )
+
+    @contextmanager
+    def chdir(self, path: pathlib.Path) -> Iterator[pathlib.Path]:
+        """
+        Change the current working directory to the provided path.
+        """
+        cwd = pathlib.Path.cwd()
+        try:
+            os.chdir(path)
+            yield path
+        finally:
+            if not cwd.exists():
+                self.error(f"Unable to change back to path {cwd}")
+            else:
+                os.chdir(cwd)
 
 
 class Parser:
