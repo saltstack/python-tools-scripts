@@ -410,7 +410,7 @@ class CommandGroup:
                 if parameter.default is not None:
                     if not kwargs["help"].endswith("."):
                         kwargs["help"] += "."
-                    kwargs["help"] += " Default %(default)s"
+                    kwargs["help"] += " [default: %(default)s]"
             flags = kwargs.pop("flags", None)  # type: ignore[misc]
             if flags is None:
                 flags = [f"--{parameter.name.replace('_', '-')}"]
