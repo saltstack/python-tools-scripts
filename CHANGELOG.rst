@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.9.2 (2022-11-07)
+==================
+
+Bug Fixes
+---------
+
+- Properly handle `SIGINT` and `SIGTERM` on spawed subprocesses (`#7 <https://github.com/s0undt3ch/python-tools-scripts/issues/7>`_)
+
+
 0.9.1 (2022-10-09)
 ==================
 

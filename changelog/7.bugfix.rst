@@ -1,1 +1,0 @@
-Properly handle `SIGINT` and `SIGTERM` on spawed subprocesses
