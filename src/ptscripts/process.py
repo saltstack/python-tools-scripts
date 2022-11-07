@@ -5,6 +5,7 @@ import asyncio.streams
 import asyncio.subprocess
 import logging
 import os
+import signal
 import subprocess
 import sys
 from datetime import datetime
@@ -139,6 +140,12 @@ async def _subprocess_run(
 ):
     stdout = subprocess.PIPE
     stderr = subprocess.PIPE
+    kwargs = {}
+    # Run in a separate program group
+    if sys.platform.startswith("win"):
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        kwargs["preexec_fn"] = os.setpgrp
     proc = await _create_subprocess_exec(
         *cmdline,
         stdout=stdout,
@@ -147,8 +154,13 @@ async def _subprocess_run(
         limit=1,
         no_output_timeout_secs=no_output_timeout_secs,
         capture=capture,
+        **kwargs,
     )
-    stdout, stderr = await proc.communicate()
+    loop = asyncio.get_running_loop()
+    for signame in ("SIGINT", "SIGTERM"):
+        sig = getattr(signal, signame)
+        loop.add_signal_handler(sig, proc.terminate)
+    stdout, stderr = await asyncio.shield(proc.communicate())
     result = subprocess.CompletedProcess(
         args=cmdline,
         stdout=stdout,
