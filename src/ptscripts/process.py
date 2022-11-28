@@ -10,6 +10,7 @@ import subprocess
 import sys
 from datetime import datetime
 from datetime import timedelta
+from functools import partial
 from typing import cast
 from typing import TYPE_CHECKING
 
@@ -131,21 +132,35 @@ async def _create_subprocess_exec(
     return Process(transport, protocol, loop, no_output_timeout_secs=no_output_timeout_secs)
 
 
+def _handle_signal(proc, sig):
+    if sig in proc._handled_signals:
+        log.info(f"\nCaught {sig.name} again, killing the process ...")
+        proc.kill()
+        return
+    log.info(
+        f"\nCaught {sig.name}, terminating process ....\nSend {sig.name} again to kill the process."
+    )
+    proc._handled_signals.append(sig)
+    proc.terminate()
+
+
 async def _subprocess_run(
-    f,
+    future,
     cmdline,
     check=True,
     no_output_timeout_secs: int | None = None,
     capture: bool = False,
+    interactive: bool = False,
 ):
     stdout = subprocess.PIPE
     stderr = subprocess.PIPE
     kwargs = {}
-    # Run in a separate program group
-    if sys.platform.startswith("win"):
-        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-    else:
-        kwargs["preexec_fn"] = os.setpgrp
+    if interactive is False:
+        # Run in a separate program group
+        if sys.platform.startswith("win"):
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            kwargs["preexec_fn"] = os.setpgrp
     proc = await _create_subprocess_exec(
         *cmdline,
         stdout=stdout,
@@ -156,10 +171,11 @@ async def _subprocess_run(
         capture=capture,
         **kwargs,
     )
+    proc._handled_signals = []
     loop = asyncio.get_running_loop()
     for signame in ("SIGINT", "SIGTERM"):
         sig = getattr(signal, signame)
-        loop.add_signal_handler(sig, proc.terminate)
+        loop.add_signal_handler(sig, partial(_handle_signal, proc, sig))
     stdout, stderr = await asyncio.shield(proc.communicate())
     result = subprocess.CompletedProcess(
         args=cmdline,
@@ -167,7 +183,7 @@ async def _subprocess_run(
         stderr=stderr,
         returncode=proc.returncode,
     )
-    f.set_result(result)
+    future.set_result(result)
 
 
 def run(
@@ -175,6 +191,7 @@ def run(
     check=True,
     no_output_timeout_secs: int | None = None,
     capture: bool = False,
+    interactive: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """
     Run a command.
@@ -189,6 +206,7 @@ def run(
                 check,
                 no_output_timeout_secs=no_output_timeout_secs,
                 capture=capture,
+                interactive=interactive,
             )
         )
         result = future.result()

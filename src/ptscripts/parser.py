@@ -138,6 +138,7 @@ class Context:
         check=True,
         no_output_timeout_secs: int | None = None,
         capture: bool = False,
+        interactive: bool = False,
     ) -> CompletedProcess[str]:
         """
         Run a subprocess.
@@ -147,6 +148,7 @@ class Context:
             check=check,
             no_output_timeout_secs=no_output_timeout_secs,
             capture=capture,
+            interactive=interactive,
         )
 
     @contextmanager
