@@ -13,6 +13,21 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.9.3 (2022-11-28)
+==================
+
+Improvements
+------------
+
+- Repeated caught signals now kill the process (`#9 <https://github.com/s0undt3ch/python-tools-scripts/issues/9>`_)
+
+
+Bug Fixes
+---------
+
+- Fixed process interaction (`#9 <https://github.com/s0undt3ch/python-tools-scripts/issues/9>`_)
+
+
 0.9.2 (2022-11-07)
 ==================
 
