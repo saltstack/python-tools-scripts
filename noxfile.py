@@ -32,20 +32,21 @@ def twine_check(session):
 
 @nox.session(name="changelog", python="3")
 @nox.parametrize("draft", [False, True])
-def changelog(session, draft):
+def changelog(session, draft, version=None):
     """
     Generate changelog.
     """
     session.install("--progress-bar=off", "-e", ".[changelog]", silent=PIP_INSTALL_SILENT)
 
-    version = session.run(
-        "python",
-        "setup.py",
-        "--version",
-        silent=True,
-        log=False,
-        stderr=None,
-    ).strip()
+    if version is None:
+        version = session.run(
+            "python",
+            "setup.py",
+            "--version",
+            silent=True,
+            log=False,
+            stderr=None,
+        ).strip()
 
     town_cmd = ["towncrier", "build", f"--version={version}"]
     if draft:
@@ -71,7 +72,7 @@ def release(session):
     try:
         session.log("Generating temporary %s tag", version)
         session.run("git", "tag", "-as", version, "-m", f"Release {version}", external=True)
-        changelog(session, draft=False)
+        changelog(session, draft=False, version=version)
     except CommandFailed:
         session.error("Failed to generate the temporary tag")
     # session.notify("changelog(draft=False)")
