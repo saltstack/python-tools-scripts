@@ -28,6 +28,15 @@ from rich.theme import Theme
 from ptscripts import logs
 from ptscripts import process
 
+try:
+    import importlib.metadata
+
+    __version__ = importlib.metadata.version("python-tools-scripts")
+except ImportError:
+    import importlib_metadata
+
+    __version__ = importlib_metadata.version("python-tools-scripts")
+
 if TYPE_CHECKING:
     from argparse import ArgumentParser
     from argparse import _SubParsersAction
@@ -192,6 +201,7 @@ class Parser:
                 epilog="These tools are discovered under `<repo-root>/tools`.",
                 allow_abbrev=False,
             )
+            instance.parser.add_argument("--version", action="version", version=__version__)
             log_group = instance.parser.add_argument_group("Logging")
             timestamp_meg = log_group.add_mutually_exclusive_group()
             timestamp_meg.add_argument(
