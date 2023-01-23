@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.9.5 (2023-01-23)
+==================
+
+Features
+--------
+
+- Allow passing a maximum timeout for commands executed through `ctx.run()` (`#11 <https://github.com/s0undt3ch/python-tools-scripts/issues/11>`_)
+
+
 0.9.4 (2023-01-12)
 ==================
 
