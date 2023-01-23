@@ -145,6 +145,7 @@ class Context:
         self,
         *cmdline,
         check=True,
+        timeout_secs: int | None = None,
         no_output_timeout_secs: int | None = None,
         capture: bool = False,
         interactive: bool = False,
@@ -155,6 +156,7 @@ class Context:
         return process.run(
             *cmdline,
             check=check,
+            timeout_secs=timeout_secs,
             no_output_timeout_secs=no_output_timeout_secs,
             capture=capture,
             interactive=interactive,
@@ -237,6 +239,15 @@ class Parser:
             )
             run_options = instance.parser.add_argument_group(
                 "Run Subprocess Options", description="These options apply to ctx.run() calls"
+            )
+            run_options.add_argument(
+                "--timeout-secs",
+                "--ts",
+                default=None,
+                type=int,
+                help="Timeout in seconds for the command to finish.",
+                metavar="SECONDS",
+                dest="timeout_secs",
             )
             run_options.add_argument(
                 "--no-output-timeout-secs",

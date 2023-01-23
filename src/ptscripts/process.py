@@ -20,8 +20,26 @@ log = logging.getLogger(__name__)
 
 
 class Process(asyncio.subprocess.Process):  # noqa: D101
-    def __init__(self, *args, no_output_timeout_secs: int | timedelta | None = None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        timeout_secs: int | timedelta | None = None,
+        no_output_timeout_secs: int | timedelta | None = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
+        timeout_task = None
+        if isinstance(timeout_secs, int):
+            assert timeout_secs >= 1
+            timeout_secs = timedelta(seconds=timeout_secs)
+        elif isinstance(timeout_secs, timedelta):
+            assert timeout_secs >= timedelta(seconds=1)
+        if timeout_secs is not None:
+            timeout_task = self._loop.create_task(  # type: ignore[attr-defined]
+                self._check_timeout()
+            )
+        self._timeout_secs = timeout_secs
+        self._timeout_task = timeout_task
         no_output_timeout_task = None
         if isinstance(no_output_timeout_secs, int):
             assert no_output_timeout_secs >= 1
@@ -34,6 +52,34 @@ class Process(asyncio.subprocess.Process):  # noqa: D101
             )
         self._no_output_timeout_secs = no_output_timeout_secs
         self._no_output_timeout_task = no_output_timeout_task
+
+    async def _check_timeout(self):
+        try:
+            if TYPE_CHECKING:
+                assert self._timeout_secs
+            await asyncio.sleep(self._timeout_secs.seconds)
+            try:
+                self.terminate()
+                log.warning(
+                    "The command has been running for more than %s second(s). "
+                    "Terminating process.",
+                    self._timeout_secs.seconds,
+                )
+            except ProcessLookupError:
+                pass
+        except asyncio.CancelledError:
+            pass
+
+    async def _cancel_timeout_task(self):
+        task = self._timeout_task
+        if task is None:
+            return
+        self._timeout_task = None
+        if task.done():
+            return
+        if not task.cancelled():
+            task.cancel()
+        await task
 
     async def _check_no_output_timeout(self):
         self._protocol._last_write = datetime.utcnow()  # type: ignore[attr-defined]
@@ -73,6 +119,7 @@ class Process(asyncio.subprocess.Process):  # noqa: D101
         Wait until the process exit and return the process return code.
         """
         retcode = await super().wait()
+        await self._cancel_timeout_task()
         await self._cancel_no_output_timeout_task()
         return retcode
 
@@ -112,6 +159,7 @@ async def _create_subprocess_exec(
     stdout=None,
     stderr=None,
     limit=asyncio.streams._DEFAULT_LIMIT,  # type: ignore[attr-defined]
+    timeout_secs: int | None = None,
     no_output_timeout_secs: int | None = None,
     capture: bool = False,
     **kwds,
@@ -129,7 +177,13 @@ async def _create_subprocess_exec(
         stderr=stderr,
         **kwds,
     )
-    return Process(transport, protocol, loop, no_output_timeout_secs=no_output_timeout_secs)
+    return Process(
+        transport,
+        protocol,
+        loop,
+        timeout_secs=timeout_secs,
+        no_output_timeout_secs=no_output_timeout_secs,
+    )
 
 
 def _handle_signal(proc, sig):
@@ -148,6 +202,7 @@ async def _subprocess_run(
     future,
     cmdline,
     check=True,
+    timeout_secs: int | None = None,
     no_output_timeout_secs: int | None = None,
     capture: bool = False,
     interactive: bool = False,
@@ -167,6 +222,7 @@ async def _subprocess_run(
         stderr=stderr,
         stdin=sys.stdin,
         limit=1,
+        timeout_secs=timeout_secs,
         no_output_timeout_secs=no_output_timeout_secs,
         capture=capture,
         **kwargs,
@@ -189,6 +245,7 @@ async def _subprocess_run(
 def run(
     *cmdline,
     check=True,
+    timeout_secs: int | None = None,
     no_output_timeout_secs: int | None = None,
     capture: bool = False,
     interactive: bool = False,
@@ -204,6 +261,7 @@ def run(
                 future,
                 cmdline,
                 check,
+                timeout_secs=timeout_secs,
                 no_output_timeout_secs=no_output_timeout_secs,
                 capture=capture,
                 interactive=interactive,
