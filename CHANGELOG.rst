@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.9.6 (2023-01-23)
+==================
+
+Bug Fixes
+---------
+
+- Cleanup conflicting parser CLI options (`#12 <https://github.com/s0undt3ch/python-tools-scripts/issues/12>`_)
+
+
 0.9.5 (2023-01-23)
 ==================
 
