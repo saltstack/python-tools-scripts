@@ -241,8 +241,8 @@ class Parser:
                 "Run Subprocess Options", description="These options apply to ctx.run() calls"
             )
             run_options.add_argument(
+                "--timeout",
                 "--timeout-secs",
-                "--ts",
                 default=None,
                 type=int,
                 help="Timeout in seconds for the command to finish.",
