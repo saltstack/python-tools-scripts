@@ -206,10 +206,10 @@ async def _subprocess_run(
     no_output_timeout_secs: int | None = None,
     capture: bool = False,
     interactive: bool = False,
+    **kwargs,
 ):
     stdout = subprocess.PIPE
     stderr = subprocess.PIPE
-    kwargs = {}
     if interactive is False:
         # Run in a separate program group
         if sys.platform.startswith("win"):
@@ -249,6 +249,7 @@ def run(
     no_output_timeout_secs: int | None = None,
     capture: bool = False,
     interactive: bool = False,
+    **kwargs,
 ) -> subprocess.CompletedProcess[str]:
     """
     Run a command.
@@ -265,6 +266,7 @@ def run(
                 no_output_timeout_secs=no_output_timeout_secs,
                 capture=capture,
                 interactive=interactive,
+                **kwargs,
             )
         )
         result = future.result()
