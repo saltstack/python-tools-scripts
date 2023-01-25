@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.9.7 (2023-01-25)
+==================
+
+Features
+--------
+
+- Forward `ctx.run(..., **kwargs)` to the underlying subprocess call. (`#14 <https://github.com/s0undt3ch/python-tools-scripts/issues/14>`_)
+
+
 0.9.6 (2023-01-23)
 ==================
 
