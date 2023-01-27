@@ -151,12 +151,17 @@ class VirtualEnv:
             self.ctx.debug("Virtual environment path already exists")
             return
         virtualenv = shutil.which("virtualenv")
-        if not virtualenv:
-            raise FileNotFoundError("'virtualenv' binary not found")
-        cmd = [
-            virtualenv,
-            f"--python={self.get_real_python()}",
-        ]
+        if virtualenv:
+            cmd = [
+                virtualenv,
+                f"--python={self.get_real_python()}",
+            ]
+        else:
+            cmd = [
+                self.get_real_python(),
+                "-m",
+                "venv",
+            ]
         if self.system_site_packages:
             cmd.append("--system-site-packages")
         cmd.append(str(self.venv_dir))
