@@ -27,6 +27,8 @@ from rich.theme import Theme
 
 from ptscripts import logs
 from ptscripts import process
+from ptscripts.virtualenv import VirtualEnv
+from ptscripts.virtualenv import VirtualEnvConfig
 
 try:
     import importlib.metadata
@@ -98,6 +100,7 @@ class Context:
         self.console = Console(stderr=True, **console_kwargs)
         self.console_stdout = Console(**console_kwargs)
         rich.reconfigure(stderr=True, **console_kwargs)
+        self.venv = None
 
     def print(self, *args, **kwargs):
         """
@@ -141,7 +144,7 @@ class Context:
             self.console.print(message, style=style)
         self.parser.exit(status)
 
-    def run(
+    def _run(
         self,
         *cmdline,
         check=True,
@@ -155,6 +158,41 @@ class Context:
         Run a subprocess.
         """
         return process.run(
+            *cmdline,
+            check=check,
+            timeout_secs=timeout_secs,
+            no_output_timeout_secs=no_output_timeout_secs,
+            capture=capture,
+            interactive=interactive,
+            **kwargs,
+        )
+
+    def run(
+        self,
+        *cmdline,
+        check=True,
+        timeout_secs: int | None = None,
+        no_output_timeout_secs: int | None = None,
+        capture: bool = False,
+        interactive: bool = False,
+        **kwargs,
+    ) -> CompletedProcess[str]:
+        """
+        Run a subprocess.
+
+        Either in a virtualenv context if one was configured or the system context.
+        """
+        if self.venv:
+            return self.venv.run(
+                *cmdline,
+                check=check,
+                timeout_secs=timeout_secs,
+                no_output_timeout_secs=no_output_timeout_secs,
+                capture=capture,
+                interactive=interactive,
+                **kwargs,
+            )
+        return self._run(
             *cmdline,
             check=check,
             timeout_secs=timeout_secs,
@@ -178,6 +216,21 @@ class Context:
                 self.error(f"Unable to change back to path {cwd}")
             else:
                 os.chdir(cwd)
+
+    @contextmanager
+    def virtualenv(
+        self,
+        name,
+        requirements: list[str] | None = None,
+        requirements_files: list[pathlib.Path] | None = None,
+    ):
+        """
+        Create and use a virtual environment.
+        """
+        with VirtualEnv(
+            ctx=self, name=name, requirements=requirements, requirements_files=requirements_files
+        ) as venv:
+            yield venv
 
 
 class Parser:
@@ -302,12 +355,13 @@ class CommandGroup:
     Command group which holds the available tool functions.
     """
 
-    def __init__(self, name, help, description=None, parent=None):
+    def __init__(self, name, help, description=None, parent=None, venv_config=None):
         self.name = name
         if description is None:
             description = help
         if parent is None:
             parent = Parser()
+        self.venv_config = venv_config or {}
         self.parser = parent.subparsers.add_parser(
             name.replace("_", "-"),
             help=help,
@@ -327,6 +381,7 @@ class CommandGroup:
         help: str | None = None,
         description: str | None = None,
         arguments: dict[str, ArgumentOptions] | None = None,
+        venv_config: VirtualEnvConfig | None = None,
     ):
         """
         Register a sub-command in the command group.
@@ -338,6 +393,7 @@ class CommandGroup:
                 help=help,
                 description=description,
                 arguments=arguments,
+                venv_config=venv_config,
             )
 
         func_name = func.__name__
@@ -441,7 +497,7 @@ class CommandGroup:
                 flags = [f"--{parameter.name.replace('_', '-')}"]
             log.debug("Adding Command %r. Flags: %s; KwArgs: %s", name, flags, kwargs)
             command.add_argument(*flags, **kwargs)
-        command.set_defaults(func=partial(self, func))
+        command.set_defaults(func=partial(self, func, venv_config=venv_config))
         return func
 
     def __getattr__(self, attr):
@@ -450,7 +506,7 @@ class CommandGroup:
         """
         return getattr(self.parser, attr)
 
-    def __call__(self, func, options):
+    def __call__(self, func, options, venv_config: VirtualEnvConfig | None = None):
         """
         Execute the selected tool function.
         """
@@ -468,11 +524,31 @@ class CommandGroup:
                     kwargs[name] = getattr(options, name)
 
         bound = signature.bind_partial(*args, **kwargs)
-        func(self.context, *bound.args, **bound.kwargs)
+        venv = None
+        if venv_config:
+            venv_name = getattr(options, f"{self.name}_command")
+            venv = VirtualEnv(name=f"{self.name}.{venv_name}", ctx=self.context, **venv_config)
+        elif self.venv_config:
+            venv = VirtualEnv(name=self.name, ctx=self.context, **self.venv_config)
+        if venv:
+            with venv:
+                previous_venv = self.context.venv
+                try:
+                    self.context.venv = venv
+                    func(self.context, *bound.args, **bound.kwargs)
+                finally:
+                    self.context.venv = previous_venv
+        else:
+            func(self.context, *bound.args, **bound.kwargs)
 
 
-def command_group(name: str, help: str, description: str | None = None) -> CommandGroup:
+def command_group(
+    name: str,
+    help: str,
+    description: str | None = None,
+    venv_config: VirtualEnvConfig | None = None,
+) -> CommandGroup:
     """
     Create a new command group.
     """
-    return CommandGroup(name, help, description=description)
+    return CommandGroup(name, help, description=description, venv_config=venv_config)
