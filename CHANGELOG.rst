@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.10.1 (2023-01-27)
+===================
+
+Bug Fixes
+---------
+
+- Allow creating the virtual environments with `venv` as a fallback if `virtualenv` is not available. (`#15 <https://github.com/s0undt3ch/python-tools-scripts/issues/15>`_)
+
+
 0.10.0 (2023-01-27)
 ===================
 
