@@ -13,6 +13,18 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.10.0 (2023-01-27)
+===================
+
+Features
+--------
+
+- Add `virtualenv` support.
+
+  Any python requirements that must be imported in the tools scripts cannot use this virtualenv support.
+  This support is for when shelling out to binaries/scripts that get installed with the requirements. (`#13 <https://github.com/s0undt3ch/python-tools-scripts/issues/13>`_)
+
+
 0.9.7 (2023-01-25)
 ==================
 

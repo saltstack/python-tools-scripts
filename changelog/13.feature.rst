@@ -1,4 +1,0 @@
-Add `virtualenv` support.
-
-Any python requirements that must be imported in the tools scripts cannot use this virtualenv support.
-This support is for when shelling out to binaries/scripts that get installed with the requirements.
