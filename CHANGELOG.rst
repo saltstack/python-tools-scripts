@@ -13,6 +13,21 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.10.2 (2023-02-07)
+===================
+
+Bug Fixes
+---------
+
+- Allow passing `parent` to `command_group` (`#16 <https://github.com/s0undt3ch/python-tools-scripts/issues/16>`_)
+
+
+Trivial/Internal Changes
+------------------------
+
+- Update pre-commit hooks versions (`#16 <https://github.com/s0undt3ch/python-tools-scripts/issues/16>`_)
+
+
 0.10.1 (2023-01-27)
 ===================
 

@@ -1,1 +1,0 @@
-Allow passing `parent` to `command_group`
