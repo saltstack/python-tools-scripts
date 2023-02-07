@@ -547,8 +547,9 @@ def command_group(
     help: str,
     description: str | None = None,
     venv_config: VirtualEnvConfig | None = None,
+    parent: CommandGroup | None = None,
 ) -> CommandGroup:
     """
     Create a new command group.
     """
-    return CommandGroup(name, help, description=description, venv_config=venv_config)
+    return CommandGroup(name, help, description=description, venv_config=venv_config, parent=parent)
