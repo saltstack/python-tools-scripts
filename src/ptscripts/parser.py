@@ -112,25 +112,25 @@ class Context:
         """
         Print debug message to stderr.
         """
-        self.console.log(*args, style="log-debug")
+        self.console.log(*args, style="log-debug", _stack_offset=2)
 
     def info(self, *args):
         """
         Print info message to stderr.
         """
-        self.console.log(*args, style="log-info")
+        self.console.log(*args, style="log-info", _stack_offset=2)
 
     def warn(self, *args):
         """
         Print warning message to stderr.
         """
-        self.console.log(*args, style="log-warning")
+        self.console.log(*args, style="log-warning", _stack_offset=2)
 
     def error(self, *args):
         """
         Print error message to stderr.
         """
-        self.console.log(*args, style="log-error")
+        self.console.log(*args, style="log-error", _stack_offset=2)
 
     def exit(self, status=0, message=None):
         """
