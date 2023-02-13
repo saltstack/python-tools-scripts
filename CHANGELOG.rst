@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.10.4 (2023-02-13)
+===================
+
+Features
+--------
+
+- The filename on console logs is now only shown when debug output is enabled. (`#18 <https://github.com/s0undt3ch/python-tools-scripts/issues/18>`_)
+
+
 0.10.3 (2023-02-12)
 ===================
 

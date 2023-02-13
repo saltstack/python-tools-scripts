@@ -1,1 +1,0 @@
-The filename on console logs is now only shown when debug output is enabled.
