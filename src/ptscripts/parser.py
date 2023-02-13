@@ -97,8 +97,8 @@ class Context:
         if os.environ.get("CI"):
             console_kwargs["force_terminal"] = True
             console_kwargs["force_interactive"] = False
-        self.console = Console(stderr=True, **console_kwargs)
-        self.console_stdout = Console(**console_kwargs)
+        self.console = Console(stderr=True, log_path=False, **console_kwargs)
+        self.console_stdout = Console(log_path=False, **console_kwargs)
         rich.reconfigure(stderr=True, **console_kwargs)
         self.venv = None
 
@@ -329,6 +329,8 @@ class Parser:
             logging.root.setLevel(logging.CRITICAL + 1)
         elif options.debug:
             logging.root.setLevel(logging.DEBUG)
+            self.context.console.log_path = True
+            self.context.console_stdout.log_path = True
         else:
             logging.root.setLevel(logging.INFO)
         if options.timestamps:
