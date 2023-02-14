@@ -21,6 +21,7 @@ from typing import cast
 from typing import TYPE_CHECKING
 from typing import TypedDict
 
+import requests
 import rich
 from rich.console import Console
 from rich.theme import Theme
@@ -231,6 +232,13 @@ class Context:
             ctx=self, name=name, requirements=requirements, requirements_files=requirements_files
         ) as venv:
             yield venv
+
+    @property
+    def web(self) -> requests.Session:
+        """
+        Returns an instance of :py:class:`~requests.Session`.
+        """
+        return requests.Session()
 
 
 class Parser:

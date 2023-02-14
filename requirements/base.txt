@@ -1,3 +1,4 @@
 attrs
 rich
+requests >= 2.28.2
 typing-extensions; python_version < "3.11"

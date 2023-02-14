@@ -113,4 +113,5 @@ repos:
         additional_dependencies:
           - types-attrs
           - types-setuptools
+          - types-requests
   # <---- Code Analysis --------------------------------------------------------------------------
