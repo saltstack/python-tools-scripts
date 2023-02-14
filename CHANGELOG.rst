@@ -13,6 +13,19 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.11.0 (2023-02-14)
+===================
+
+Features
+--------
+
+- The `ctx` now has a `web` attribute, a `requests.Session` instance which can be used to make web requests. (`#19 <https://github.com/s0undt3ch/python-tools-scripts/issues/19>`_)
+- Improve the user experience when an `ImportError` occurs while instantiating tools.
+  Instead of relying on direct imports, users can now call, `pyscripts.register_tools_module('tools.<whatever>')`.
+  Python tools scripts will then import them one by one, catching and reporting any `ImportErrors` occurring.
+  Due to these errors, some of the commands might be unavailable, but most likely not all, while providing a clue as to why that is. (`#20 <https://github.com/s0undt3ch/python-tools-scripts/issues/20>`_)
+
+
 0.10.4 (2023-02-13)
 ===================
 
