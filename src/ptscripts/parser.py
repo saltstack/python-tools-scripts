@@ -4,6 +4,7 @@ Python tools scripts CLI parser.
 from __future__ import annotations
 
 import argparse
+import importlib
 import inspect
 import logging
 import os
@@ -241,6 +242,40 @@ class Context:
         return requests.Session()
 
 
+class RegisteredImports:
+    """
+    Simple class to hold registered imports.
+    """
+
+    _instance: RegisteredImports | None = None
+    _registered_imports: list[str]
+
+    def __new__(cls):
+        """
+        Method that instantiates a singleton class and returns it.
+        """
+        if cls._instance is None:
+            instance = super().__new__(cls)
+            instance._registered_imports = []
+            cls._instance = instance
+        return cls._instance
+
+    @classmethod
+    def register_import(cls, import_module: str) -> None:
+        """
+        Register an import.
+        """
+        instance = cls()
+        if import_module not in instance._registered_imports:
+            instance._registered_imports.append(import_module)
+
+    def __iter__(self):
+        """
+        Return an iterator of all registered imports.
+        """
+        return iter(self._registered_imports)
+
+
 class Parser:
     """
     Singleton parser class that wraps argparse.
@@ -328,10 +363,22 @@ class Parser:
             cls._instance = instance
         return cls._instance
 
+    def _process_registered_tool_modules(self):
+        for module_name in RegisteredImports():
+            try:
+                importlib.import_module(module_name)
+            except ImportError as exc:
+                if os.environ.get("TOOLS_IGNORE_IMPORT_ERRORS", "0") == "0":
+                    self.context.warn(
+                        f"Could not import the registered tools module {module_name!r}: {exc}"
+                    )
+
     def parse_args(self):
         """
         Parse CLI.
         """
+        # Process registered imports to allow other modules to register commands
+        self._process_registered_tool_modules()
         options = self.parser.parse_args()
         if options.quiet:
             logging.root.setLevel(logging.CRITICAL + 1)

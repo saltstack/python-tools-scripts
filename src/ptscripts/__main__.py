@@ -23,7 +23,6 @@ def main():
     except ImportError:
         # No tools/ directory in the current CWD
         pass
-
     parser.parse_args()
 
 
