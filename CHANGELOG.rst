@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.11.1 (2023-02-16)
+===================
+
+Bug Fixes
+---------
+
+- Properly handle `subprocess.CalledProcessError`. Catch the exception, print the error, and exit with the `.returncode` attribute value. (`#21 <https://github.com/s0undt3ch/python-tools-scripts/issues/21>`_)
+
+
 0.11.0 (2023-02-14)
 ===================
 

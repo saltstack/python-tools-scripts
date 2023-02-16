@@ -1,1 +1,0 @@
-Properly handle `subprocess.CalledProcessError`. Catch the exception, print the error, and exit with the `.returncode` attribute value.
