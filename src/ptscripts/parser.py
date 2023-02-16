@@ -9,6 +9,7 @@ import inspect
 import logging
 import os
 import pathlib
+import subprocess
 import sys
 import typing
 from collections.abc import Iterator
@@ -178,14 +179,24 @@ class Context:
         capture: bool = False,
         interactive: bool = False,
         **kwargs,
-    ) -> CompletedProcess[str]:
+    ) -> CompletedProcess[str] | None:
         """
         Run a subprocess.
 
         Either in a virtualenv context if one was configured or the system context.
         """
-        if self.venv:
-            return self.venv.run(
+        try:
+            if self.venv:
+                return self.venv.run(
+                    *cmdline,
+                    check=check,
+                    timeout_secs=timeout_secs,
+                    no_output_timeout_secs=no_output_timeout_secs,
+                    capture=capture,
+                    interactive=interactive,
+                    **kwargs,
+                )
+            return self._run(
                 *cmdline,
                 check=check,
                 timeout_secs=timeout_secs,
@@ -194,15 +205,10 @@ class Context:
                 interactive=interactive,
                 **kwargs,
             )
-        return self._run(
-            *cmdline,
-            check=check,
-            timeout_secs=timeout_secs,
-            no_output_timeout_secs=no_output_timeout_secs,
-            capture=capture,
-            interactive=interactive,
-            **kwargs,
-        )
+        except subprocess.CalledProcessError as exc:
+            self.error(str(exc))
+            self.exit(exc.returncode)
+        return None
 
     @contextmanager
     def chdir(self, path: pathlib.Path) -> Iterator[pathlib.Path]:
