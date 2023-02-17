@@ -413,6 +413,43 @@ class Parser:
         return getattr(self.parser, attr)
 
 
+class GroupReference:
+    """
+    Simple class to hold tools command group names comparable to how
+    they would be invoked using the CLI.
+
+    For example, tools vm create is stored as ("tools", "vm", "create")
+    """
+
+    _instance: GroupReference | None = None
+    _commands: list[str]
+
+    def __new__(cls):
+        """
+        Method that instantiates a singleton class and returns it.
+        """
+        if cls._instance is None:
+            instance = super().__new__(cls)
+            instance._commands = {}
+            cls._instance = instance
+        return cls._instance
+
+    @classmethod
+    def add_command(cls, cli_name: tuple[str], group: CommandGroup) -> None:
+        """
+        Add a tools command.
+        """
+        instance = cls()
+        if cli_name not in instance._commands:
+            instance._commands[cli_name] = group
+
+    def __getitem__(self, item):
+        """
+        Propogate getting a command parser to the underlying dict.
+        """
+        return self._commands[item]
+
+
 class CommandGroup:
     """
     Command group which holds the available tool functions.
@@ -424,6 +461,16 @@ class CommandGroup:
             description = help
         if parent is None:
             parent = Parser()
+            GroupReference.add_command((name,), self)
+        # We can also pass a string or list of strings that specify the parent commands.
+        # This should help avoid circular imports
+        if isinstance(parent, str):
+            parent = [parent]
+        if isinstance(parent, list):
+            # NOTE: This means ordering of imports is important, but better than risking circular imports
+            GroupReference.add_command(tuple(parent + [name]), self)
+            parent = GroupReference()[tuple(parent)]
+
         self.venv_config = venv_config or {}
         self.parser = parent.subparsers.add_parser(
             name.replace("_", "-"),
