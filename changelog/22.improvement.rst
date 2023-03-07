@@ -1,1 +1,0 @@
-Allow passing a string or list of strings as the parent to avoid circular imports.

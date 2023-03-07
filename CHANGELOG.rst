@@ -13,6 +13,22 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.12.0 (2023-03-07)
+===================
+
+Improvements
+------------
+
+- Allow passing a string or list of strings as the parent to avoid circular imports. (`#22 <https://github.com/s0undt3ch/python-tools-scripts/issues/22>`_)
+- Take the `TOOLS_VIRTUALENV_CACHE_SEED` environmental variable into account when calculating the virtual environments cache hash. (`#23 <https://github.com/s0undt3ch/python-tools-scripts/issues/23>`_)
+
+
+Bug Fixes
+---------
+
+- Catch `NotImplementedError` exception when setting up signal handling. Windows, for example, does not support signal handling with asyncio. (`#24 <https://github.com/s0undt3ch/python-tools-scripts/issues/24>`_)
+
+
 0.11.1 (2023-02-16)
 ===================
 

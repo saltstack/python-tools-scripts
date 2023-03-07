@@ -1,1 +1,0 @@
-Take the `TOOLS_VIRTUALENV_CACHE_SEED` environmental variable into account when calculating the virtual environments cache hash.
