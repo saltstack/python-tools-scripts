@@ -1,0 +1,1 @@
+Catch `NotImplementedError` exception when setting up signal handling. Windows, for example, does not support signal handling with asyncio.

@@ -231,7 +231,11 @@ async def _subprocess_run(
     loop = asyncio.get_running_loop()
     for signame in ("SIGINT", "SIGTERM"):
         sig = getattr(signal, signame)
-        loop.add_signal_handler(sig, partial(_handle_signal, proc, sig))
+        try:
+            loop.add_signal_handler(sig, partial(_handle_signal, proc, sig))
+        except NotImplementedError:
+            # On Windows, `add_signal_handler` is not defined, so we catch and ignore
+            pass
     stdout, stderr = await asyncio.shield(proc.communicate())
     result = subprocess.CompletedProcess(
         args=cmdline,
