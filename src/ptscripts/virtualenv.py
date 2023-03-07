@@ -105,6 +105,8 @@ class VirtualEnv:
     @requirements_hash.default
     def __default_requirements_hash(self):
         requirements_hash = hashlib.sha256(self.name.encode())
+        hash_seed = os.environ.get("TOOLS_VIRTUALENV_CACHE_SEED", "")
+        requirements_hash.update(hash_seed.encode())
         if self.requirements:
             for requirement in sorted(self.requirements):
                 requirements_hash.update(requirement.encode())
