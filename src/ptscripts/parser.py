@@ -415,14 +415,14 @@ class Parser:
 
 class GroupReference:
     """
-    Simple class to hold tools command group names comparable to how
-    they would be invoked using the CLI.
+    Simple class to hold tools command group names.
 
-    For example, tools vm create is stored as ("tools", "vm", "create")
+    These are comparable to how they would be invoked using the CLI.
+    For example, ``tools vm create`` is stored as ``("tools", "vm", "create")``
     """
 
     _instance: GroupReference | None = None
-    _commands: list[str]
+    _commands: dict[tuple[str, ...], CommandGroup]
 
     def __new__(cls):
         """
@@ -435,7 +435,7 @@ class GroupReference:
         return cls._instance
 
     @classmethod
-    def add_command(cls, cli_name: tuple[str], group: CommandGroup) -> None:
+    def add_command(cls, cli_name: tuple[str, ...], group: CommandGroup) -> None:
         """
         Add a tools command.
         """
