@@ -14,12 +14,14 @@ import sys
 import typing
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextlib import nullcontext
 from functools import partial
 from subprocess import CompletedProcess
 from types import FunctionType
 from types import GenericAlias
 from typing import Any
 from typing import cast
+from typing import ContextManager
 from typing import TYPE_CHECKING
 from typing import TypedDict
 
@@ -248,13 +250,13 @@ class Context:
         return requests.Session()
 
 
-class RegisteredImports:
+class DefaultVirtualenvConfig:
     """
     Simple class to hold registered imports.
     """
 
-    _instance: RegisteredImports | None = None
-    _registered_imports: list[str]
+    _instance: DefaultVirtualenvConfig | None = None
+    venv_config: VirtualEnvConfig
 
     def __new__(cls):
         """
@@ -262,24 +264,56 @@ class RegisteredImports:
         """
         if cls._instance is None:
             instance = super().__new__(cls)
-            instance._registered_imports = []
             cls._instance = instance
         return cls._instance
 
     @classmethod
-    def register_import(cls, import_module: str) -> None:
+    def set_default_venv_config(cls, venv_config: VirtualEnvConfig) -> None:
+        """
+        Register an import.
+        """
+        instance = cls._instance
+        if instance is None:
+            instance = cls()
+        if venv_config and "name" not in venv_config:
+            venv_config["name"] = "default"
+        instance.venv_config = venv_config
+
+
+class RegisteredImports:
+    """
+    Simple class to hold registered imports.
+    """
+
+    _instance: RegisteredImports | None = None
+    _registered_imports: dict[str, VirtualEnvConfig | None]
+
+    def __new__(cls):
+        """
+        Method that instantiates a singleton class and returns it.
+        """
+        if cls._instance is None:
+            instance = super().__new__(cls)
+            instance._registered_imports = {}
+            cls._instance = instance
+        return cls._instance
+
+    @classmethod
+    def register_import(
+        cls, import_module: str, venv_config: VirtualEnvConfig | None = None
+    ) -> None:
         """
         Register an import.
         """
         instance = cls()
         if import_module not in instance._registered_imports:
-            instance._registered_imports.append(import_module)
+            instance._registered_imports[import_module] = venv_config
 
     def __iter__(self):
         """
         Return an iterator of all registered imports.
         """
-        return iter(self._registered_imports)
+        return iter(self._registered_imports.items())
 
 
 class Parser:
@@ -370,14 +404,29 @@ class Parser:
         return cls._instance
 
     def _process_registered_tool_modules(self):
-        for module_name in RegisteredImports():
-            try:
-                importlib.import_module(module_name)
-            except ImportError as exc:
-                if os.environ.get("TOOLS_IGNORE_IMPORT_ERRORS", "0") == "0":
-                    self.context.warn(
-                        f"Could not import the registered tools module {module_name!r}: {exc}"
-                    )
+        default_venv: VirtualEnv | ContextManager[None]
+        default_venv_config = DefaultVirtualenvConfig().venv_config
+        if default_venv_config:
+            default_venv = VirtualEnv(ctx=self.context, **default_venv_config)
+        else:
+            default_venv = nullcontext()
+        with default_venv:
+            for module_name, venv_config in RegisteredImports():
+                venv: VirtualEnv | ContextManager[None]
+                if venv_config:
+                    if "name" not in venv_config:
+                        venv_config["name"] = module_name
+                    venv = VirtualEnv(ctx=self.context, **venv_config)
+                else:
+                    venv = nullcontext()
+                with venv:
+                    try:
+                        importlib.import_module(module_name)
+                    except ImportError as exc:
+                        if os.environ.get("TOOLS_IGNORE_IMPORT_ERRORS", "0") == "0":
+                            self.context.warn(
+                                f"Could not import the registered tools module {module_name!r}: {exc}"
+                            )
 
     def parse_args(self):
         """
@@ -471,6 +520,8 @@ class CommandGroup:
             GroupReference.add_command(tuple(parent + [name]), self)
             parent = GroupReference()[tuple(parent)]
 
+        if venv_config and "name" not in venv_config:
+            venv_config["name"] = self.name
         self.venv_config = venv_config or {}
         self.parser = parent.subparsers.add_parser(
             name.replace("_", "-"),
@@ -634,22 +685,22 @@ class CommandGroup:
                     kwargs[name] = getattr(options, name)
 
         bound = signature.bind_partial(*args, **kwargs)
-        venv = None
+        venv: VirtualEnv | ContextManager[None]
         if venv_config:
-            venv_name = getattr(options, f"{self.name}_command")
-            venv = VirtualEnv(name=f"{self.name}.{venv_name}", ctx=self.context, **venv_config)
+            if "name" not in venv_config:
+                venv_config["name"] = getattr(options, f"{self.name}_command")
+            venv = VirtualEnv(ctx=self.context, **venv_config)
         elif self.venv_config:
-            venv = VirtualEnv(name=self.name, ctx=self.context, **self.venv_config)
-        if venv:
-            with venv:
-                previous_venv = self.context.venv
-                try:
-                    self.context.venv = venv
-                    func(self.context, *bound.args, **bound.kwargs)
-                finally:
-                    self.context.venv = previous_venv
+            venv = VirtualEnv(ctx=self.context, **self.venv_config)
         else:
-            func(self.context, *bound.args, **bound.kwargs)
+            venv = nullcontext()
+        with venv:
+            previous_venv = self.context.venv
+            try:
+                self.context.venv = venv
+                func(self.context, *bound.args, **bound.kwargs)
+            finally:
+                self.context.venv = previous_venv
 
 
 def command_group(

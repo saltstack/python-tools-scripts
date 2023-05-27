@@ -6,6 +6,7 @@ import logging
 import os
 import pathlib
 import shutil
+import site
 import subprocess
 import sys
 import textwrap
@@ -32,12 +33,14 @@ class VirtualEnvConfig(TypedDict):
     Virtualenv Configuration Typing.
     """
 
+    name: NotRequired[str]
     requirements: NotRequired[list[str]]
     requirements_files: NotRequired[list[pathlib.Path]]
     env: NotRequired[dict[str, str]]
     system_site_packages: NotRequired[bool]
     pip_requirement: NotRequired[str]
     setuptools_requirement: NotRequired[str]
+    add_as_extra_site_packages: NotRequired[bool]
 
 
 def _cast_to_pathlib_path(value):
@@ -60,6 +63,7 @@ class VirtualEnv:
     system_site_packages: bool = attr.ib(default=False)
     pip_requirement: str = attr.ib(repr=False)
     setuptools_requirement: str = attr.ib(repr=False)
+    add_as_extra_site_packages: bool = attr.ib(default=False)
     environ: dict[str, str] = attr.ib(init=False, repr=False)
     venv_dir: pathlib.Path = attr.ib(init=False)
     venv_python: pathlib.Path = attr.ib(init=False, repr=False)
@@ -175,6 +179,25 @@ class VirtualEnv:
             self.setuptools_requirement,
         )
 
+    def _add_as_extra_site_packages(self):
+        if self.add_as_extra_site_packages is False:
+            return
+        ret = self.run_code(
+            "import json,site; print(json.dumps(site.getsitepackages()))",
+            capture=True,
+            check=False,
+        )
+        if ret.returncode:
+            self.ctx.error(
+                f"Failed to get the virtualenv's site packages path: {ret.stderr.decode()}"
+            )
+            self.ctx.exit(1)
+        site_packages = site.getsitepackages()
+        for path in json.loads(ret.stdout.strip().decode()):
+            if path not in site_packages:
+                site.addsitedir(path)
+        site_packages = site.getsitepackages()
+
     def __enter__(self):
         """
         Creates the virtual environment when entering context.
@@ -184,6 +207,7 @@ class VirtualEnv:
         except subprocess.CalledProcessError:
             raise AssertionError("Failed to create virtualenv")
         self._install_requirements()
+        self._add_as_extra_site_packages()
         return self
 
     def __exit__(self, *args):

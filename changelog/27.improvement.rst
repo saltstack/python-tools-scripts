@@ -1,0 +1,1 @@
+Allow passing virtualenv configuration when calling ``ptscripts.register_tools_module``
