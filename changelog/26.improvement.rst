@@ -1,1 +1,0 @@
-Add support for a default Virtualenv. The default virtualenv site-packages will be added to the running python as an extra site dir.

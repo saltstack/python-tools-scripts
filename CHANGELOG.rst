@@ -13,6 +13,18 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.13.0 (2023-05-27)
+===================
+
+Improvements
+------------
+
+- Allow importing the virtualenv's dependencies into the python running ``tools``.
+  This will allow maintaining a lighter ``tools.txt`` requirements file, and install additional dependencies only for the commands that really need them. (`#25 <https://github.com/s0undt3ch/python-tools-scripts/issues/25>`_)
+- Add support for a default Virtualenv. The default virtualenv site-packages will be added to the running python as an extra site dir. (`#26 <https://github.com/s0undt3ch/python-tools-scripts/issues/26>`_)
+- Allow passing virtualenv configuration when calling ``ptscripts.register_tools_module`` (`#27 <https://github.com/s0undt3ch/python-tools-scripts/issues/27>`_)
+
+
 0.12.0 (2023-03-07)
 ===================
 

@@ -1,2 +1,0 @@
-Allow importing the virtualenv's dependencies into the python running ``tools``.
-This will allow maintaining a lighter ``tools.txt`` requirements file, and install additional dependencies only for the commands that really need them.
