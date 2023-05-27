@@ -104,7 +104,7 @@ repos:
         - flake8-typing-imports
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.0.0
+    rev: v1.3.0
     hooks:
       - id: mypy
         name: Run mypy against the code base
