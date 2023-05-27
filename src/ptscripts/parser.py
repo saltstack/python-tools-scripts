@@ -22,8 +22,8 @@ from types import GenericAlias
 from typing import Any
 from typing import cast
 from typing import ContextManager
+from typing import NoReturn
 from typing import TYPE_CHECKING
-from typing import TypedDict
 
 import requests
 import rich
@@ -34,6 +34,11 @@ from ptscripts import logs
 from ptscripts import process
 from ptscripts.virtualenv import VirtualEnv
 from ptscripts.virtualenv import VirtualEnvConfig
+
+if sys.version_info < (3, 11):
+    from typing_extensions import TypedDict, NotRequired
+else:
+    from typing import TypedDict, NotRequired
 
 try:
     import importlib.metadata
@@ -56,14 +61,15 @@ class ArgumentOptions(TypedDict):
     TypedDict class documenting the acceptable keys and their types for arguments.
     """
 
-    flags: list[str]
-    help: str
-    action: str | argparse.Action
-    nargs: int | str
-    const: Any
-    choices: list[str]
-    required: bool
-    metavar: str
+    help: NotRequired[str]
+    flags: NotRequired[list[str]]
+    action: NotRequired[str | argparse.Action]
+    nargs: NotRequired[int | str]
+    const: NotRequired[Any]
+    choices: NotRequired[list[str] | tuple[str, ...]]
+    required: NotRequired[bool]
+    metavar: NotRequired[str]
+    default: NotRequired[Any]
 
 
 class FullArgumentOptions(ArgumentOptions):
@@ -73,7 +79,6 @@ class FullArgumentOptions(ArgumentOptions):
 
     dest: str
     type: type[Any]
-    default: Any
 
 
 class Context:
@@ -137,7 +142,7 @@ class Context:
         """
         self.console.log(*args, style="log-error", _stack_offset=2)
 
-    def exit(self, status=0, message=None):
+    def exit(self, status=0, message=None) -> NoReturn:  # type: ignore[misc]
         """
         Exit the command execution.
         """
@@ -158,7 +163,7 @@ class Context:
         capture: bool = False,
         interactive: bool = False,
         **kwargs,
-    ) -> CompletedProcess[str]:
+    ) -> CompletedProcess[bytes]:
         """
         Run a subprocess.
         """
@@ -181,7 +186,7 @@ class Context:
         capture: bool = False,
         interactive: bool = False,
         **kwargs,
-    ) -> CompletedProcess[str] | None:
+    ) -> CompletedProcess[bytes]:
         """
         Run a subprocess.
 
@@ -208,9 +213,11 @@ class Context:
                 **kwargs,
             )
         except subprocess.CalledProcessError as exc:
-            self.error(str(exc))
-            self.exit(exc.returncode)
-        return None
+            self._exit(str(exc), exc.returncode)
+
+    def _exit(self, msg: str, returncode: int) -> NoReturn:
+        self.error(msg)
+        self.exit(returncode)
 
     @contextmanager
     def chdir(self, path: pathlib.Path) -> Iterator[pathlib.Path]:
@@ -653,7 +660,7 @@ class CommandGroup:
                     if not kwargs["help"].endswith("."):
                         kwargs["help"] += "."
                     kwargs["help"] += " [default: %(default)s]"
-            flags = kwargs.pop("flags", None)  # type: ignore[misc]
+            flags = kwargs.pop("flags", None)
             if flags is None:
                 flags = [f"--{parameter.name.replace('_', '-')}"]
             log.debug("Adding Command %r. Flags: %s; KwArgs: %s", name, flags, kwargs)
@@ -708,7 +715,7 @@ def command_group(
     help: str,
     description: str | None = None,
     venv_config: VirtualEnvConfig | None = None,
-    parent: CommandGroup | None = None,
+    parent: CommandGroup | str | list[str] | tuple[str] | None = None,
 ) -> CommandGroup:
     """
     Create a new command group.

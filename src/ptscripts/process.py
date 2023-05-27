@@ -254,7 +254,7 @@ def run(
     capture: bool = False,
     interactive: bool = False,
     **kwargs,
-) -> subprocess.CompletedProcess[str]:
+) -> subprocess.CompletedProcess[bytes]:
     """
     Run a command.
     """
@@ -276,7 +276,7 @@ def run(
         result = future.result()
         if check is True:
             result.check_returncode()
-        return cast(subprocess.CompletedProcess[str], result)
+        return cast(subprocess.CompletedProcess[bytes], result)
     finally:
         loop.run_until_complete(loop.shutdown_asyncgens())
         loop.close()

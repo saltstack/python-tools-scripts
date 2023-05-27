@@ -10,13 +10,13 @@ import site
 import subprocess
 import sys
 import textwrap
+from subprocess import CompletedProcess
 from typing import TYPE_CHECKING
-from typing import TypedDict
 
-try:
-    from typing import NotRequired  # type: ignore[attr-defined]
-except ImportError:
-    from typing_extensions import NotRequired
+if sys.version_info < (3, 11):
+    from typing_extensions import TypedDict, NotRequired
+else:
+    from typing import TypedDict, NotRequired
 
 import attr
 
@@ -227,7 +227,7 @@ class VirtualEnv:
         """
         return self.run(self.venv_python, "-m", "pip", "uninstall", "-y", *args, **kwargs)
 
-    def run(self, *args, **kwargs):
+    def run(self, *args, **kwargs) -> CompletedProcess[bytes]:
         """
         Run a command in the context of the virtual environment.
         """
