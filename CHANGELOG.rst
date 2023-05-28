@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.13.3 (2023-05-28)
+===================
+
+Bug Fixes
+---------
+
+- Don't set `context.vent` to a `nullcontext` (`#30 <https://github.com/s0undt3ch/python-tools-scripts/issues/30>`_)
+
+
 0.13.2 (2023-05-27)
 ===================
 
