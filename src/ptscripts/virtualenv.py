@@ -175,6 +175,7 @@ class VirtualEnv:
         self.run(*cmd, cwd=str(self.venv_dir.parent))
         self.install(
             "-U",
+            "wheel",
             self.pip_requirement,
             self.setuptools_requirement,
         )
