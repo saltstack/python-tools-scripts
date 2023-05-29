@@ -692,10 +692,15 @@ class CommandGroup:
                     kwargs[name] = getattr(options, name)
 
         bound = signature.bind_partial(*args, **kwargs)
+        venv: VirtualEnv | None = None
         if venv_config:
             if "name" not in venv_config:
                 venv_config["name"] = getattr(options, f"{self.name}_command")
-            with VirtualEnv(ctx=self.context, **venv_config) as venv:
+            venv = VirtualEnv(ctx=self.context, **venv_config)
+        elif self.venv_config:
+            venv = VirtualEnv(ctx=self.context, **self.venv_config)
+        if venv:
+            with venv:
                 previous_venv = self.context.venv
                 try:
                     self.context.venv = venv
