@@ -86,8 +86,10 @@ class Context:
     Context class passed to every command group function as the first argument.
     """
 
-    def __init__(self, parser: Parser):
+    def __init__(self, parser: Parser, debug: bool = False, quiet: bool = False):
         self.parser = parser
+        self._quiet = quiet
+        self._debug = debug
         self.repo_root = parser.repo_root
         theme = Theme(
             {
@@ -122,13 +124,15 @@ class Context:
         """
         Print debug message to stderr.
         """
-        self.console.log(*args, style="log-debug", _stack_offset=2)
+        if self._debug:
+            self.console.log(*args, style="log-debug", _stack_offset=2)
 
     def info(self, *args):
         """
         Print info message to stderr.
         """
-        self.console.log(*args, style="log-info", _stack_offset=2)
+        if not self._quiet:
+            self.console.log(*args, style="log-info", _stack_offset=2)
 
     def warn(self, *args):
         """
@@ -339,9 +343,21 @@ class Parser:
         Method that instantiates a singleton class and returns it.
         """
         if cls._instance is None:
+            # Let's do a litle manual parsing so that we can set debug or quiet early
+            debug = False
+            quiet = False
+            for arg in sys.argv[1:]:
+                if not arg.startswith("-"):
+                    break
+                if arg in ("-q", "--quiet"):
+                    quiet = True
+                    break
+                if arg in ("-d", "--debug"):
+                    debug = True
+                    break
             instance = super().__new__(cls)
             instance.repo_root = pathlib.Path.cwd()
-            instance.context = Context(instance)
+            instance.context = Context(instance, debug=debug, quiet=quiet)
             instance.parser = argparse.ArgumentParser(
                 prog="tools",
                 description="Python Tools Scripts",
@@ -443,12 +459,18 @@ class Parser:
         self._process_registered_tool_modules()
         options = self.parser.parse_args()
         if options.quiet:
+            self.context._quiet = True
+            self.context._debug = False
             logging.root.setLevel(logging.CRITICAL + 1)
         elif options.debug:
+            self.context._quiet = False
+            self.context._debug = True
             logging.root.setLevel(logging.DEBUG)
             self.context.console.log_path = True
             self.context.console_stdout.log_path = True
         else:
+            self.context._quiet = False
+            self.context._debug = False
             logging.root.setLevel(logging.INFO)
         if options.timestamps:
             for handler in logging.root.handlers:
@@ -466,6 +488,8 @@ class Parser:
         """
         Proxy unknown attributes to the parser instance.
         """
+        if attr == "options":
+            return self.__getattribute__(attr)
         return getattr(self.parser, attr)
 
 

@@ -1,0 +1,1 @@
+Handle `-d/--debug` and `-q/--quiet` as early as possible
