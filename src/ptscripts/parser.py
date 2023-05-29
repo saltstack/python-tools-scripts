@@ -267,7 +267,7 @@ class DefaultVirtualenvConfig:
     """
 
     _instance: DefaultVirtualenvConfig | None = None
-    venv_config: VirtualEnvConfig
+    venv_config: VirtualEnvConfig | None
 
     def __new__(cls):
         """
@@ -275,6 +275,7 @@ class DefaultVirtualenvConfig:
         """
         if cls._instance is None:
             instance = super().__new__(cls)
+            instance.venv_config = None
             cls._instance = instance
         return cls._instance
 
