@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.13.5 (2023-05-29)
+===================
+
+Bug Fixes
+---------
+
+- Handle `-d/--debug` and `-q/--quiet` as early as possible (`#32 <https://github.com/s0undt3ch/python-tools-scripts/issues/32>`_)
+
+
 0.13.4 (2023-05-29)
 ===================
 
