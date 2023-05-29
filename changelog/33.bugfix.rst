@@ -1,1 +1,0 @@
-Set `DefaultVirtualenvConfig.venv_config` to `None` when creating the class instance.

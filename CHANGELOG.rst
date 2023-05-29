@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.13.6 (2023-05-29)
+===================
+
+Bug Fixes
+---------
+
+- Set `DefaultVirtualenvConfig.venv_config` to `None` when creating the class instance. (`#33 <https://github.com/s0undt3ch/python-tools-scripts/issues/33>`_)
+
+
 0.13.5 (2023-05-29)
 ===================
 
