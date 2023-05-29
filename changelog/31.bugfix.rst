@@ -1,1 +1,0 @@
-Fixed bug where `venv_config` defined in `command_group` was getting ignored

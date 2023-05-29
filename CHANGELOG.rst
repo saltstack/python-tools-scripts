@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.13.4 (2023-05-29)
+===================
+
+Bug Fixes
+---------
+
+- Fixed bug where `venv_config` defined in `command_group` was getting ignored (`#31 <https://github.com/s0undt3ch/python-tools-scripts/issues/31>`_)
+
+
 0.13.3 (2023-05-28)
 ===================
 
