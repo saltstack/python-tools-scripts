@@ -6,7 +6,6 @@ import logging
 import os
 import pathlib
 import shutil
-import site
 import subprocess
 import sys
 import textwrap
@@ -193,11 +192,26 @@ class VirtualEnv:
                 f"Failed to get the virtualenv's site packages path: {ret.stderr.decode()}"
             )
             self.ctx.exit(1)
-        site_packages = site.getsitepackages()
         for path in json.loads(ret.stdout.strip().decode()):
-            if path not in site_packages:
-                site.addsitedir(path)
-        site_packages = site.getsitepackages()
+            if path not in sys.path:
+                sys.path.append(path)
+
+    def _remove_extra_site_packages(self):
+        if self.add_as_extra_site_packages is False:
+            return
+        ret = self.run_code(
+            "import json,site; print(json.dumps(site.getsitepackages()))",
+            capture=True,
+            check=False,
+        )
+        if ret.returncode:
+            self.ctx.error(
+                f"Failed to get the virtualenv's site packages path: {ret.stderr.decode()}"
+            )
+            self.ctx.exit(1)
+        for path in json.loads(ret.stdout.strip().decode()):
+            if path in sys.path:
+                sys.path.remove(path)
 
     def __enter__(self):
         """
@@ -215,6 +229,7 @@ class VirtualEnv:
         """
         Exit the virtual environment context.
         """
+        self._remove_extra_site_packages()
 
     def install(self, *args, **kwargs):
         """

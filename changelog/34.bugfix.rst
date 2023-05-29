@@ -1,0 +1,1 @@
+Remove virtualenv `site-packages` from `sys.path` in context manager exit
