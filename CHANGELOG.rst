@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.14.0 (2023-05-29)
+===================
+
+Bug Fixes
+---------
+
+- Remove virtualenv `site-packages` from `sys.path` in context manager exit (`#34 <https://github.com/s0undt3ch/python-tools-scripts/issues/34>`_)
+
+
 0.13.6 (2023-05-29)
 ===================
 
