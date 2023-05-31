@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.15.0 (2023-05-31)
+===================
+
+Improvements
+------------
+
+- `VirtualEnvConfig` now additionally accepts `pip_args` which is a list of strings to pass to `pip` when installing the virtualenv's requirements. (`#35 <https://github.com/s0undt3ch/python-tools-scripts/issues/35>`_)
+
+
 0.14.0 (2023-05-29)
 ===================
 
