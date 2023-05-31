@@ -1,0 +1,1 @@
+`VirtualEnvConfig` now additionally accepts `pip_args` which is a list of strings to pass to `pip` when installing the virtualenv's requirements.

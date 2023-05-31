@@ -40,6 +40,7 @@ class VirtualEnvConfig(TypedDict):
     pip_requirement: NotRequired[str]
     setuptools_requirement: NotRequired[str]
     add_as_extra_site_packages: NotRequired[bool]
+    pip_args: NotRequired[list[str]]
 
 
 def _cast_to_pathlib_path(value):
@@ -63,6 +64,7 @@ class VirtualEnv:
     pip_requirement: str = attr.ib(repr=False)
     setuptools_requirement: str = attr.ib(repr=False)
     add_as_extra_site_packages: bool = attr.ib(default=False)
+    pip_args: list[str] = attr.ib(factory=list, repr=False)
     environ: dict[str, str] = attr.ib(init=False, repr=False)
     venv_dir: pathlib.Path = attr.ib(init=False)
     venv_python: pathlib.Path = attr.ib(init=False, repr=False)
@@ -110,6 +112,8 @@ class VirtualEnv:
         requirements_hash = hashlib.sha256(self.name.encode())
         hash_seed = os.environ.get("TOOLS_VIRTUALENV_CACHE_SEED", "")
         requirements_hash.update(hash_seed.encode())
+        if self.pip_args:
+            requirements_hash.update(str(sorted(self.pip_args)).encode())
         if self.requirements:
             for requirement in sorted(self.requirements):
                 requirements_hash.update(requirement.encode())
@@ -148,7 +152,7 @@ class VirtualEnv:
             requirements.extend(sorted(self.requirements))
         if requirements:
             self.ctx.info(f"Install requirements for virtualenv({self.name}) ...")
-            self.install(*requirements)
+            self.install(*self.pip_args, *requirements)
         self.venv_dir.joinpath(".requirements.hash").write_text(self.requirements_hash)
 
     def _create_virtualenv(self):
