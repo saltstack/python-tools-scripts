@@ -4,6 +4,7 @@ Python tools scripts CLI parser.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import inspect
 import logging
@@ -12,33 +13,47 @@ import pathlib
 import subprocess
 import sys
 import typing
-from collections.abc import Iterator
+from contextlib import AbstractContextManager
 from contextlib import contextmanager
 from contextlib import nullcontext
+from functools import cached_property
 from functools import partial
 from subprocess import CompletedProcess
 from types import FunctionType
 from types import GenericAlias
-from typing import Any
-from typing import cast
-from typing import ContextManager
-from typing import NoReturn
 from typing import TYPE_CHECKING
+from typing import Any
+from typing import Callable
+from typing import NoReturn
+from typing import TypeVar
+from typing import cast
 
+import attr
 import requests
 import rich
 from rich.console import Console
 from rich.theme import Theme
 
+from ptscripts import CWD
 from ptscripts import logs
 from ptscripts import process
 from ptscripts.virtualenv import VirtualEnv
 from ptscripts.virtualenv import VirtualEnvConfig
+from ptscripts.virtualenv import _cast_to_pathlib_path
+
+if sys.version_info < (3, 10):
+    from typing_extensions import Concatenate
+    from typing_extensions import ParamSpec
+else:
+    from typing import Concatenate
+    from typing import ParamSpec
 
 if sys.version_info < (3, 11):
-    from typing_extensions import TypedDict, NotRequired
+    from typing_extensions import NotRequired
+    from typing_extensions import TypedDict
 else:
-    from typing import TypedDict, NotRequired
+    from typing import NotRequired
+    from typing import TypedDict
 
 try:
     import importlib.metadata
@@ -51,7 +66,24 @@ except ImportError:
 
 if TYPE_CHECKING:
     from argparse import ArgumentParser
+    from argparse import Namespace
     from argparse import _SubParsersAction
+    from collections.abc import Iterator
+
+
+Param = ParamSpec("Param")
+RetType = TypeVar("RetType")
+OriginalFunc = Callable[Param, RetType]
+DecoratedFunc = Callable[Concatenate[str, Param], RetType]
+
+if "TOOLS_SCRIPTS_PATH" in os.environ:
+    TOOLS_SCRIPTS_PATH = pathlib.Path(os.environ["TOOLS_SCRIPTS_PATH"]).resolve()
+else:
+    TOOLS_SCRIPTS_PATH = CWD
+
+TOOLS_BASE_PATH = TOOLS_SCRIPTS_PATH / ".tools"
+TOOLS_DEPS_PATH = TOOLS_BASE_PATH / "deps"
+
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +118,7 @@ class Context:
     Context class passed to every command group function as the first argument.
     """
 
-    def __init__(self, parser: Parser, debug: bool = False, quiet: bool = False):
+    def __init__(self, parser: Parser, debug: bool = False, quiet: bool = False) -> None:
         self.parser = parser
         self._quiet = quiet
         self._debug = debug
@@ -114,39 +146,39 @@ class Context:
         rich.reconfigure(stderr=True, **console_kwargs)
         self.venv = None
 
-    def print(self, *args, **kwargs):
+    def print(self, *args, **kwargs) -> None:
         """
         Print to stdout.
         """
         self.console_stdout.print(*args, **kwargs)
 
-    def debug(self, *args):
+    def debug(self, *args: str) -> None:
         """
         Print debug message to stderr.
         """
         if self._debug:
             self.console.log(*args, style="log-debug", _stack_offset=2)
 
-    def info(self, *args):
+    def info(self, *args: str) -> None:
         """
         Print info message to stderr.
         """
         if not self._quiet:
             self.console.log(*args, style="log-info", _stack_offset=2)
 
-    def warn(self, *args):
+    def warn(self, *args: str) -> None:
         """
         Print warning message to stderr.
         """
         self.console.log(*args, style="log-warning", _stack_offset=2)
 
-    def error(self, *args):
+    def error(self, *args: str) -> None:
         """
         Print error message to stderr.
         """
         self.console.log(*args, style="log-error", _stack_offset=2)
 
-    def exit(self, status=0, message=None) -> NoReturn:  # type: ignore[misc]
+    def exit(self, status: int = 0, message: str | None = None) -> NoReturn:  # type: ignore[misc]
         """
         Exit the command execution.
         """
@@ -160,8 +192,8 @@ class Context:
 
     def _run(
         self,
-        *cmdline,
-        check=True,
+        *cmdline: str,
+        check: bool = True,
         timeout_secs: int | None = None,
         no_output_timeout_secs: int | None = None,
         capture: bool = False,
@@ -183,8 +215,8 @@ class Context:
 
     def run(
         self,
-        *cmdline,
-        check=True,
+        *cmdline: str,
+        check: bool = True,
         timeout_secs: int | None = None,
         no_output_timeout_secs: int | None = None,
         capture: bool = False,
@@ -241,10 +273,10 @@ class Context:
     @contextmanager
     def virtualenv(
         self,
-        name,
+        name: str,
         requirements: list[str] | None = None,
         requirements_files: list[pathlib.Path] | None = None,
-    ):
+    ) -> Iterator[VirtualEnv]:
         """
         Create and use a virtual environment.
         """
@@ -261,35 +293,122 @@ class Context:
         return requests.Session()
 
 
-class DefaultVirtualenvConfig:
+@attr.s(frozen=True)
+class DefaultRequirementsConfig:
+    """
+    Default tools requirements configuration typing.
+    """
+
+    requirements: list[str] = attr.ib(factory=list)
+    requirements_files: list[pathlib.Path] = attr.ib(factory=list)
+    pip_args: list[str] = attr.ib(factory=list)
+    base_tools_dir: pathlib.Path = attr.ib(init=False)
+    deps_dir: pathlib.Path = attr.ib(init=False)
+
+    @base_tools_dir.default
+    def _default_base_tools_dir(self) -> pathlib.Path:
+        base_tools_path = TOOLS_SCRIPTS_PATH / ".tools"
+        base_tools_path.mkdir(exist_ok=True)
+        return base_tools_path
+
+    @deps_dir.default
+    def _default_deps_dir(self) -> pathlib.Path:
+        default_deps_dir = self.base_tools_dir / "deps"
+        default_deps_dir.mkdir(exist_ok=True)
+        return default_deps_dir
+
+    @cached_property
+    def requirements_hash(self) -> str:
+        """
+        Returns a sha256 hash of the requirements.
+        """
+        requirements_hash = hashlib.sha256()
+        hash_seed = os.environ.get("TOOLS_VIRTUALENV_CACHE_SEED", "")
+        requirements_hash.update(hash_seed.encode())
+        if self.pip_args:
+            for argument in self.pip_args:
+                requirements_hash.update(argument.encode())
+        if self.requirements:
+            for requirement in sorted(self.requirements):
+                requirements_hash.update(requirement.encode())
+        if self.requirements_files:
+            for fpath in sorted(self.requirements_files):
+                with _cast_to_pathlib_path(fpath).open("rb") as rfh:
+                    try:
+                        digest = hashlib.file_digest(rfh, "sha256")  # type: ignore[attr-defined]
+                    except AttributeError:
+                        # Python < 3.11
+                        buf = bytearray(2**18)  # Reusable buffer to reduce allocations.
+                        view = memoryview(buf)
+                        digest = hashlib.sha256()
+                        while True:
+                            size = rfh.readinto(buf)
+                            if size == 0:
+                                break  # EOF
+                            digest.update(view[:size])
+                    requirements_hash.update(digest.digest())
+        return requirements_hash.hexdigest()
+
+    def install(self, ctx: Context) -> None:
+        """
+        Install default requirements.
+        """
+        requirements_hash_file = self.deps_dir / ".requirements.hash"
+        if (
+            requirements_hash_file.exists()
+            and requirements_hash_file.read_text() == self.requirements_hash
+        ):
+            # Requirements are up to date
+            ctx.debug("Base tools requirements haven't changed.")
+            return
+        requirements = []
+        if self.requirements_files:
+            for fpath in self.requirements_files:
+                requirements.extend(["-r", str(fpath)])
+        if self.requirements:
+            requirements.extend(self.requirements)
+        if requirements:
+            ctx.info("Installing base tools requirements ...")
+            ctx.run(
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--prefix",
+                str(self.deps_dir),
+                *self.pip_args,
+                *requirements,
+            )
+        requirements_hash_file.write_text(self.requirements_hash)
+
+
+class DefaultToolsPythonRequirements:
     """
     Simple class to hold registered imports.
     """
 
-    _instance: DefaultVirtualenvConfig | None = None
-    venv_config: VirtualEnvConfig | None
+    _instance: DefaultToolsPythonRequirements | None = None
+    reqs_config: DefaultRequirementsConfig | None
 
-    def __new__(cls):
+    def __new__(cls) -> DefaultToolsPythonRequirements:
         """
         Method that instantiates a singleton class and returns it.
         """
         if cls._instance is None:
             instance = super().__new__(cls)
-            instance.venv_config = None
+            instance.reqs_config = None
             cls._instance = instance
         return cls._instance
 
     @classmethod
-    def set_default_venv_config(cls, venv_config: VirtualEnvConfig) -> None:
+    def set_default_requirements_config(cls, reqs_config: DefaultRequirementsConfig) -> None:
         """
-        Register an import.
+        Set the default tools requirements configuration.
         """
         instance = cls._instance
         if instance is None:
             instance = cls()
-        if venv_config and "name" not in venv_config:
-            venv_config["name"] = "default"
-        instance.venv_config = venv_config
+        instance.reqs_config = reqs_config
 
 
 class RegisteredImports:
@@ -300,7 +419,7 @@ class RegisteredImports:
     _instance: RegisteredImports | None = None
     _registered_imports: dict[str, VirtualEnvConfig | None]
 
-    def __new__(cls):
+    def __new__(cls) -> RegisteredImports:
         """
         Method that instantiates a singleton class and returns it.
         """
@@ -321,7 +440,7 @@ class RegisteredImports:
         if import_module not in instance._registered_imports:
             instance._registered_imports[import_module] = venv_config
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[tuple[str, VirtualEnvConfig | None]]:
         """
         Return an iterator of all registered imports.
         """
@@ -339,7 +458,7 @@ class Parser:
     context: Context
     repo_root: pathlib.Path
 
-    def __new__(cls):
+    def __new__(cls) -> Parser:
         """
         Method that instantiates a singleton class and returns it.
         """
@@ -427,32 +546,28 @@ class Parser:
             cls._instance = instance
         return cls._instance
 
-    def _process_registered_tool_modules(self):
-        default_venv: VirtualEnv | ContextManager[None]
-        default_venv_config = DefaultVirtualenvConfig().venv_config
-        if default_venv_config:
-            default_venv = VirtualEnv(ctx=self.context, **default_venv_config)
-        else:
-            default_venv = nullcontext()
-        with default_venv:
-            for module_name, venv_config in RegisteredImports():
-                venv: VirtualEnv | ContextManager[None]
-                if venv_config:
-                    if "name" not in venv_config:
-                        venv_config["name"] = module_name
-                    venv = VirtualEnv(ctx=self.context, **venv_config)
-                else:
-                    venv = nullcontext()
-                with venv:
-                    try:
-                        importlib.import_module(module_name)
-                    except ImportError as exc:
-                        if os.environ.get("TOOLS_IGNORE_IMPORT_ERRORS", "0") == "0":
-                            self.context.warn(
-                                f"Could not import the registered tools module {module_name!r}: {exc}"
-                            )
+    def _process_registered_tool_modules(self) -> None:
+        default_reqs_config = DefaultToolsPythonRequirements().reqs_config
+        if default_reqs_config:
+            default_reqs_config.install(self.context)
+        for module_name, venv_config in RegisteredImports():
+            venv: VirtualEnv | AbstractContextManager[None]
+            if venv_config:
+                if "name" not in venv_config:
+                    venv_config["name"] = module_name
+                venv = VirtualEnv(ctx=self.context, **venv_config)
+            else:
+                venv = nullcontext()
+            with venv:
+                try:
+                    importlib.import_module(module_name)
+                except ImportError as exc:
+                    if os.environ.get("TOOLS_IGNORE_IMPORT_ERRORS", "0") == "0":
+                        self.context.warn(
+                            f"Could not import the registered tools module {module_name!r}: {exc}"
+                        )
 
-    def parse_args(self):
+    def parse_args(self) -> None:
         """
         Parse CLI.
         """
@@ -482,10 +597,10 @@ class Parser:
         self.options = options
         if "func" not in options:
             self.context.exit(1, "No command was passed.")
-        log.debug(f"CLI parsed options {options}")
+        log.debug("CLI parsed options %s", options)
         options.func(options)
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str) -> Any:  # noqa: ANN401
         """
         Proxy unknown attributes to the parser instance.
         """
@@ -505,7 +620,7 @@ class GroupReference:
     _instance: GroupReference | None = None
     _commands: dict[tuple[str, ...], CommandGroup]
 
-    def __new__(cls):
+    def __new__(cls) -> GroupReference:
         """
         Method that instantiates a singleton class and returns it.
         """
@@ -524,7 +639,7 @@ class GroupReference:
         if cli_name not in instance._commands:
             instance._commands[cli_name] = group
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: tuple[str, ...]) -> CommandGroup:
         """
         Propogate getting a command parser to the underlying dict.
         """
@@ -536,7 +651,14 @@ class CommandGroup:
     Command group which holds the available tool functions.
     """
 
-    def __init__(self, name, help, description=None, parent=None, venv_config=None):
+    def __init__(
+        self,
+        name: str,
+        help: str,
+        description: str | None = None,
+        parent: Parser | CommandGroup | list[str] | tuple[str] | str | None = None,
+        venv_config: VirtualEnvConfig | None = None,
+    ) -> None:
         self.name = name
         if description is None:
             description = help
@@ -549,13 +671,15 @@ class CommandGroup:
             parent = [parent]
         if isinstance(parent, list):
             # NOTE: This means ordering of imports is important, but better than risking circular imports
-            GroupReference.add_command(tuple(parent + [name]), self)
+            GroupReference.add_command((*parent, name), self)
             parent = GroupReference()[tuple(parent)]
 
         if venv_config and "name" not in venv_config:
             venv_config["name"] = self.name
         self.venv_config = venv_config or {}
-        self.parser = parent.subparsers.add_parser(
+        if TYPE_CHECKING:
+            assert parent
+        self.parser = parent.subparsers.add_parser(  # type: ignore[union-attr, has-type]
             name.replace("_", "-"),
             help=help,
             description=description,
@@ -564,9 +688,9 @@ class CommandGroup:
             title="Commands",
             dest=f"{name.replace('-', '_')}_command",
         )
-        self.context = parent.context
+        self.context = parent.context  # type: ignore[union-attr, has-type]
 
-    def command(
+    def command(  # noqa: ANN201,C901,PLR0912,PLR0915
         self,
         func: FunctionType | None = None,
         *,
@@ -608,22 +732,23 @@ class CommandGroup:
 
         if arguments is None:
             if len(signature.parameters) > 1:
-                raise RuntimeError(
+                msg = (
                     f"'arguments' is a mandatory keyword argument to the '@{self.name}.command' "
                     "decorator when additional arguments(besides the required 'ctx' as first "
                     "argument) or keyword arguments are defined. Please update the decorated "
                     f"function {func_name!r} in {func_path!r}."
                 )
+                raise RuntimeError(msg)
             arguments = {}
 
         for key in arguments:
             if key not in signature.parameters:
-                raise RuntimeError(
-                    "Only pass argument names or keyword argument names on the 'arguments' "
-                    f"keyword for the '@{self.name}.command' decorated function {func_name!r} "
-                    f"in {func_path!r} which are also present in it's signature, {key!r} is "
-                    "not present."
+                msg = (
+                    "Only pass argument names or keyword argument names on the 'arguments' keyword "
+                    f"for the '@{self.name}.command' decorated function {func_name!r} in {func_path!r} "
+                    f"which are also present in it's signature, {key!r} is not present."
                 )
+                raise RuntimeError(msg)
 
         type_annotation = typing.get_type_hints(func)
         first_parameter_seen = False
@@ -631,10 +756,11 @@ class CommandGroup:
             if first_parameter_seen is False:
                 first_parameter_seen = True
                 if parameter.name != "ctx":
-                    raise RuntimeError(
+                    msg = (
                         f"'ctx' is a mandatory first argument to the '@{self.name}.command' "
                         f"decorated function {func_name!r} in {func_path!r}."
                     )
+                    raise RuntimeError(msg)
                 continue
             if parameter.annotation is parameter.empty:
                 # No typing annotations
@@ -656,13 +782,13 @@ class CommandGroup:
             if parameter.default is parameter.empty:
                 # Positional argument
                 kwargs["type"] = param_type
-                command.add_argument(parameter.name, **kwargs)
+                command.add_argument(parameter.name, **kwargs)  # type: ignore[arg-type]
                 continue
 
             if kwargs.get("nargs") == "*":
                 # Positional argument
                 kwargs["type"] = param_type
-                command.add_argument(parameter.name, **kwargs)
+                command.add_argument(parameter.name, **kwargs)  # type: ignore[arg-type]
                 continue
 
             # Keyword argument
@@ -680,26 +806,30 @@ class CommandGroup:
                         kwargs["action"] = action
 
             kwargs["default"] = parameter.default
-            if "help" in kwargs:
-                if parameter.default is not None:
-                    if not kwargs["help"].endswith("."):
-                        kwargs["help"] += "."
-                    kwargs["help"] += " [default: %(default)s]"
+            if "help" in kwargs and parameter.default is not None:
+                if not kwargs["help"].endswith("."):
+                    kwargs["help"] += "."
+                kwargs["help"] += " [default: %(default)s]"
             flags = kwargs.pop("flags", None)
             if flags is None:
                 flags = [f"--{parameter.name.replace('_', '-')}"]
             log.debug("Adding Command %r. Flags: %s; KwArgs: %s", name, flags, kwargs)
-            command.add_argument(*flags, **kwargs)
+            command.add_argument(*flags, **kwargs)  # type: ignore[arg-type]
         command.set_defaults(func=partial(self, func, venv_config=venv_config))
         return func
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str) -> Any:  # noqa: ANN401
         """
         Proxy unknown attributes to the parser instance.
         """
         return getattr(self.parser, attr)
 
-    def __call__(self, func, options, venv_config: VirtualEnvConfig | None = None):
+    def __call__(
+        self,
+        func: Callable[..., None],
+        options: Namespace,
+        venv_config: VirtualEnvConfig | None = None,
+    ) -> None:
         """
         Execute the selected tool function.
         """
@@ -741,7 +871,7 @@ def command_group(
     help: str,
     description: str | None = None,
     venv_config: VirtualEnvConfig | None = None,
-    parent: CommandGroup | str | list[str] | tuple[str] | None = None,
+    parent: Parser | CommandGroup | list[str] | tuple[str] | str | None = None,
 ) -> CommandGroup:
     """
     Create a new command group.

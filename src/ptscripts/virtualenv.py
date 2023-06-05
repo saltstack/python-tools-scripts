@@ -13,9 +13,11 @@ from subprocess import CompletedProcess
 from typing import TYPE_CHECKING
 
 if sys.version_info < (3, 11):
-    from typing_extensions import TypedDict, NotRequired
+    from typing_extensions import NotRequired
+    from typing_extensions import TypedDict
 else:
-    from typing import TypedDict, NotRequired
+    from typing import NotRequired
+    from typing import TypedDict
 
 import attr
 
@@ -43,7 +45,7 @@ class VirtualEnvConfig(TypedDict):
     pip_args: NotRequired[list[str]]
 
 
-def _cast_to_pathlib_path(value):
+def _cast_to_pathlib_path(value: str | pathlib.Path) -> pathlib.Path:
     if isinstance(value, pathlib.Path):
         return value
     return pathlib.Path(str(value))
@@ -72,43 +74,43 @@ class VirtualEnv:
     requirements_hash: str = attr.ib(init=False, repr=False)
 
     @pip_requirement.default
-    def _default_pip_requiremnt(self):
+    def _default_pip_requiremnt(self) -> str:
         return "pip>=22.3.1,<23.0"
 
     @setuptools_requirement.default
-    def _default_setuptools_requirement(self):
+    def _default_setuptools_requirement(self) -> str:
         # https://github.com/pypa/setuptools/commit/137ab9d684075f772c322f455b0dd1f992ddcd8f
         return "setuptools>=65.6.3,<66"
 
     @venv_dir.default
-    def _default_venv_dir(self):
-        if "TOOLS_VIRTUALENVS_PATH" in os.environ:
-            base_path = pathlib.Path(os.environ["TOOLS_VIRTUALENVS_PATH"])
+    def _default_venv_dir(self) -> pathlib.Path:
+        if "TOOLS_SCRIPTS_PATH" in os.environ:
+            base_path = pathlib.Path(os.environ["TOOLS_SCRIPTS_PATH"])
         else:
             base_path = CWD
-        venvs_path = base_path / ".tools-venvs"
-        venvs_path.mkdir(exist_ok=True)
+        venvs_path = base_path / ".tools" / "venvs"
+        venvs_path.mkdir(parents=True, exist_ok=True)
         return venvs_path / self.name
 
     @environ.default
-    def _default_environ(self):
+    def _default_environ(self) -> dict[str, str]:
         environ = os.environ.copy()
         if self.env:
             environ.update(self.env)
         return environ
 
     @venv_python.default
-    def _default_venv_python(self):
+    def _default_venv_python(self) -> pathlib.Path:
         if sys.platform.startswith("win"):
             return self.venv_dir / "Scripts" / "python.exe"
         return self.venv_dir / "bin" / "python"
 
     @venv_bin_dir.default
-    def _default_venv_bin_dir(self):
+    def _default_venv_bin_dir(self) -> pathlib.Path:
         return self.venv_python.parent
 
     @requirements_hash.default
-    def __default_requirements_hash(self):
+    def __default_requirements_hash(self) -> str:
         requirements_hash = hashlib.sha256(self.name.encode())
         hash_seed = os.environ.get("TOOLS_VIRTUALENV_CACHE_SEED", "")
         requirements_hash.update(hash_seed.encode())
@@ -135,7 +137,7 @@ class VirtualEnv:
                     requirements_hash.update(digest.digest())
         return requirements_hash.hexdigest()
 
-    def _install_requirements(self):
+    def _install_requirements(self) -> None:
         requirements_hash_file = self.venv_dir / ".requirements.hash"
         if (
             requirements_hash_file.exists()
@@ -155,7 +157,7 @@ class VirtualEnv:
             self.install(*self.pip_args, *requirements)
         self.venv_dir.joinpath(".requirements.hash").write_text(self.requirements_hash)
 
-    def _create_virtualenv(self):
+    def _create_virtualenv(self) -> None:
         if self.venv_dir.exists():
             self.ctx.debug("Virtual environment path already exists")
             return
@@ -183,7 +185,7 @@ class VirtualEnv:
             self.setuptools_requirement,
         )
 
-    def _add_as_extra_site_packages(self):
+    def _add_as_extra_site_packages(self) -> None:
         if self.add_as_extra_site_packages is False:
             return
         ret = self.run_code(
@@ -200,7 +202,7 @@ class VirtualEnv:
             if path not in sys.path:
                 sys.path.append(path)
 
-    def _remove_extra_site_packages(self):
+    def _remove_extra_site_packages(self) -> None:
         if self.add_as_extra_site_packages is False:
             return
         ret = self.run_code(
@@ -217,37 +219,38 @@ class VirtualEnv:
             if path in sys.path:
                 sys.path.remove(path)
 
-    def __enter__(self):
+    def __enter__(self) -> VirtualEnv:
         """
         Creates the virtual environment when entering context.
         """
         try:
             self._create_virtualenv()
         except subprocess.CalledProcessError:
-            raise AssertionError("Failed to create virtualenv")
+            msg = "Failed to create virtualenv"
+            raise AssertionError(msg) from None
         self._install_requirements()
         self._add_as_extra_site_packages()
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args) -> None:
         """
         Exit the virtual environment context.
         """
         self._remove_extra_site_packages()
 
-    def install(self, *args, **kwargs):
+    def install(self, *args: str, **kwargs) -> CompletedProcess[bytes]:
         """
         Install the passed python packages.
         """
-        return self.run(self.venv_python, "-m", "pip", "install", *args, **kwargs)
+        return self.run(str(self.venv_python), "-m", "pip", "install", *args, **kwargs)
 
-    def uninstall(self, *args, **kwargs):
+    def uninstall(self, *args, **kwargs) -> CompletedProcess[bytes]:
         """
         Uninstall the passed python packages.
         """
-        return self.run(self.venv_python, "-m", "pip", "uninstall", "-y", *args, **kwargs)
+        return self.run(str(self.venv_python), "-m", "pip", "uninstall", "-y", *args, **kwargs)
 
-    def run(self, *args, **kwargs) -> CompletedProcess[bytes]:
+    def run(self, *args: str, **kwargs) -> CompletedProcess[bytes]:
         """
         Run a command in the context of the virtual environment.
         """
@@ -260,10 +263,10 @@ class VirtualEnv:
             environ["PATH"] = str(self.venv_bin_dir)
         else:
             environ["PATH"] = f"{self.venv_bin_dir}{os.pathsep}{environ['PATH']}"
-        return self.ctx._run(*args, env=environ, **kwargs)
+        return self.ctx._run(*args, env=environ, **kwargs)  # noqa: SLF001
 
     @staticmethod
-    def get_real_python():
+    def get_real_python() -> str:
         """
         Get the real python binary.
 
@@ -278,28 +281,25 @@ class VirtualEnv:
         try:
             if sys.platform.startswith("win"):
                 return os.path.join(sys.real_prefix, os.path.basename(sys.executable))
-            else:
-                python_binary_names = [
-                    "python{}.{}".format(*sys.version_info),
-                    "python{}".format(*sys.version_info),
-                    "python",
-                ]
-                for binary_name in python_binary_names:
-                    python = os.path.join(sys.real_prefix, "bin", binary_name)  # type: ignore[attr-defined]
-                    if os.path.exists(python):
-                        break
-                else:
-                    raise AssertionError(
-                        "Couldn't find a python binary name under '{}' matching: {}".format(
-                            os.path.join(sys.real_prefix, "bin"),  # type: ignore[attr-defined]
-                            python_binary_names,
-                        )
-                    )
-                return python
+            python_binary_names = [
+                "python{}.{}".format(*sys.version_info),
+                "python{}".format(*sys.version_info),
+                "python",
+            ]
+            for binary_name in python_binary_names:
+                python = os.path.join(sys.real_prefix, "bin", binary_name)  # type: ignore[attr-defined]
+                if os.path.exists(python):
+                    return python
+            msg = "Couldn't find a python binary name under '{}' matching: {}".format(
+                os.path.join(sys.real_prefix, "bin"), python_binary_names  # type: ignore[attr-defined]
+            )
+            raise AssertionError(msg)  # noqa: TRY301
         except AttributeError:
             return sys.executable
 
-    def run_code(self, code_string, python=None, **kwargs):
+    def run_code(
+        self, code_string: str, python: str | None = None, **kwargs
+    ) -> CompletedProcess[bytes]:
         """
         Run a code string against the virtual environment.
         """
@@ -311,7 +311,7 @@ class VirtualEnv:
             python = str(self.venv_python)
         return self.run(python, "-c", code_string, **kwargs)
 
-    def get_installed_packages(self):
+    def get_installed_packages(self) -> dict[str, str]:
         """
         Get the installed packages in the virtual environment.
         """

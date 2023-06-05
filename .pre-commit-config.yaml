@@ -16,44 +16,14 @@ repos:
   # ----- Local Hooks --------------------------------------------------------------------------->
   # <---- Local Hooks ----------------------------------------------------------------------------
 
-  # ----- Formatting ---------------------------------------------------------------------------->
-  - repo: https://github.com/asottile/reorder_python_imports
-    rev: v3.9.0
+  # ----- Code Formatting and Analysis ---------------------------------------------------------->
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: "v0.0.270"
     hooks:
-      - id: reorder-python-imports
-        args: [
-          --py39-plus,
-          --application-directories=.:src,
-          --add-import=from __future__ import annotations
-        ]
-        exclude: (?x)^(
-          setup
-          |
-          noxfile
-          |
-          demo/.*
-          |
-          .pre-commit-hooks/.*
-          |
-          src/ptscripts/version
-          )\.py$
-
-  - repo: https://github.com/asottile/pyupgrade
-    rev: v3.3.1
-    hooks:
-      - id: pyupgrade
-        name: Rewrite Code to be Py3.9+
-        args: [
-          --py39-plus
-        ]
-        files: ^((setup|noxfile)|(src|tests)/.*)\.py$
-        exclude: (?x)^(
-            demo/.*
-            |
-            .pre-commit-hooks/.*
-            |
-            src/ptscripts/version
-          )\.py
+      - id: ruff
+        args:
+          - --fix
+        exclude: (.pre-commit-hooks/.*|docs/.*)\.py
 
   - repo: https://github.com/psf/black
     rev: 23.1.0
@@ -69,39 +39,7 @@ repos:
         args: [--skip-errors]
         files: ^(docs/.*\.rst|src/ptscripts/.*\.py)$
         additional_dependencies:
-          - black==23.1.0.
-  # <---- Formatting -----------------------------------------------------------------------------
-
-  # ----- Security ------------------------------------------------------------------------------>
-  - repo: https://github.com/PyCQA/bandit
-    rev: "1.7.4"
-    hooks:
-      - id: bandit
-        alias: bandit-salt
-        name: Run bandit against the code base
-        args: [--silent, -lll, --skip, B701]
-        files: ^(?!tests/).*\.py$
-        exclude: src/ptscripts/version.py
-  - repo: https://github.com/PyCQA/bandit
-    rev: "1.7.4"
-    hooks:
-      - id: bandit
-        alias: bandit-tests
-        name: Run bandit against the test suite
-        args: [--silent, -lll, --skip, B701]
-        files: ^tests/.*
-  # <---- Security -------------------------------------------------------------------------------
-
-  # ----- Code Analysis ------------------------------------------------------------------------->
-  - repo: https://github.com/pycqa/flake8
-    rev: '6.0.0'
-    hooks:
-      - id: flake8
-        exclude: ^(demo/.*|src/ptscripts/version\.py|\.pre-commit-hooks/.*\.py)$
-        additional_dependencies:
-        - flake8-mypy-fork
-        - flake8-docstrings
-        - flake8-typing-imports
+          - black==23.1.0
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.3.0
@@ -114,4 +52,4 @@ repos:
           - types-attrs
           - types-setuptools
           - types-requests
-  # <---- Code Analysis --------------------------------------------------------------------------
+  # <---- Code Formatting and Analysis -----------------------------------------------------------

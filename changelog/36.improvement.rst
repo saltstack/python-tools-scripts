@@ -1,0 +1,1 @@
+Switch to [ruff](https://github.com/charliermarsh/ruff)

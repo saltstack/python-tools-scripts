@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio.events
 import asyncio.streams
 import asyncio.subprocess
+import contextlib
 import logging
 import os
 import signal
@@ -10,9 +11,11 @@ import subprocess
 import sys
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 from functools import partial
-from typing import cast
 from typing import TYPE_CHECKING
+from typing import TextIO
+from typing import cast
 
 from . import logs
 
@@ -26,14 +29,14 @@ class Process(asyncio.subprocess.Process):  # noqa: D101
         timeout_secs: int | timedelta | None = None,
         no_output_timeout_secs: int | timedelta | None = None,
         **kwargs,
-    ):
+    ) -> None:
         super().__init__(*args, **kwargs)
         timeout_task = None
         if isinstance(timeout_secs, int):
-            assert timeout_secs >= 1
+            assert timeout_secs >= 1  # noqa: S101
             timeout_secs = timedelta(seconds=timeout_secs)
         elif isinstance(timeout_secs, timedelta):
-            assert timeout_secs >= timedelta(seconds=1)
+            assert timeout_secs >= timedelta(seconds=1)  # noqa: S101
         if timeout_secs is not None:
             timeout_task = self._loop.create_task(  # type: ignore[attr-defined]
                 self._check_timeout()
@@ -42,10 +45,10 @@ class Process(asyncio.subprocess.Process):  # noqa: D101
         self._timeout_task = timeout_task
         no_output_timeout_task = None
         if isinstance(no_output_timeout_secs, int):
-            assert no_output_timeout_secs >= 1
+            assert no_output_timeout_secs >= 1  # noqa: S101
             no_output_timeout_secs = timedelta(seconds=no_output_timeout_secs)
         elif isinstance(no_output_timeout_secs, timedelta):
-            assert no_output_timeout_secs >= timedelta(seconds=1)
+            assert no_output_timeout_secs >= timedelta(seconds=1)  # noqa: S101
         if no_output_timeout_secs is not None:
             no_output_timeout_task = self._loop.create_task(  # type: ignore[attr-defined]
                 self._check_no_output_timeout()
@@ -53,7 +56,7 @@ class Process(asyncio.subprocess.Process):  # noqa: D101
         self._no_output_timeout_secs = no_output_timeout_secs
         self._no_output_timeout_task = no_output_timeout_task
 
-    async def _check_timeout(self):
+    async def _check_timeout(self) -> None:
         try:
             if TYPE_CHECKING:
                 assert self._timeout_secs
@@ -70,7 +73,7 @@ class Process(asyncio.subprocess.Process):  # noqa: D101
         except asyncio.CancelledError:
             pass
 
-    async def _cancel_timeout_task(self):
+    async def _cancel_timeout_task(self) -> None:
         task = self._timeout_task
         if task is None:
             return
@@ -81,15 +84,16 @@ class Process(asyncio.subprocess.Process):  # noqa: D101
             task.cancel()
         await task
 
-    async def _check_no_output_timeout(self):
-        self._protocol._last_write = datetime.utcnow()  # type: ignore[attr-defined]
+    async def _check_no_output_timeout(self) -> None:
+        now = datetime.now(tz=timezone.utc)
+        self._protocol._last_write = now  # type: ignore[attr-defined]
         try:
             while self.returncode is None:
                 await asyncio.sleep(1)
                 last_write = self._protocol._last_write  # type: ignore[attr-defined]
                 if TYPE_CHECKING:
                     assert self._no_output_timeout_secs
-                if last_write + self._no_output_timeout_secs < datetime.utcnow():
+                if last_write + self._no_output_timeout_secs < now:
                     try:
                         self.terminate()
                         log.warning(
@@ -103,7 +107,7 @@ class Process(asyncio.subprocess.Process):  # noqa: D101
         except asyncio.CancelledError:
             pass
 
-    async def _cancel_no_output_timeout_task(self):
+    async def _cancel_no_output_timeout_task(self) -> None:
         task = self._no_output_timeout_task
         if task is None:
             return
@@ -114,7 +118,7 @@ class Process(asyncio.subprocess.Process):  # noqa: D101
             task.cancel()
         await task
 
-    async def wait(self):
+    async def wait(self) -> int:
         """
         Wait until the process exit and return the process return code.
         """
@@ -125,46 +129,49 @@ class Process(asyncio.subprocess.Process):  # noqa: D101
 
 
 class SubprocessStreamProtocol(asyncio.subprocess.SubprocessStreamProtocol):  # noqa: D101
-    def __init__(self, *args, capture=False, **kwargs):
+    def __init__(self, *args, capture: bool = False, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._capture = capture
-        self._last_write = None
+        self._capture: bool = capture
+        self._last_write: datetime | None = None
 
-    def pipe_data_received(self, fd, data):  # noqa: D102
-        self._last_write = datetime.utcnow()
+    def pipe_data_received(self, fd: int, data: bytes | str) -> None:  # noqa: D102
+        self._last_write = datetime.now(tz=timezone.utc)
         if self._capture:
             super().pipe_data_received(fd, data)
             return
-        data = data.decode("utf-8")
+        if isinstance(data, bytes):
+            decoded_data = data.decode("utf-8")
+        else:
+            decoded_data = data
         if logs.include_timestamps() or "CI" in os.environ:
-            if not data.strip():
+            if not decoded_data.strip():
                 return
             if fd == 1:
-                log.stdout(data)  # type: ignore[attr-defined]
+                log.stdout(decoded_data)  # type: ignore[attr-defined]
             else:
-                log.stderr(data)  # type: ignore[attr-defined]
+                log.stderr(decoded_data)  # type: ignore[attr-defined]
         else:
-            if fd == 1:
-                sys.stdout.write(data)
+            if fd == 1:  # noqa: PLR5501
+                sys.stdout.write(decoded_data)
                 sys.stdout.flush()
             else:
-                sys.stderr.write(data)
+                sys.stderr.write(decoded_data)
                 sys.stderr.flush()
 
 
 async def _create_subprocess_exec(
-    program,
-    *args,
-    stdin=None,
-    stdout=None,
-    stderr=None,
-    limit=asyncio.streams._DEFAULT_LIMIT,  # type: ignore[attr-defined]
+    program: str,
+    *args: str,
+    stdin: TextIO | None = None,
+    stdout: int | None = None,
+    stderr: int | None = None,
+    limit: int = asyncio.streams._DEFAULT_LIMIT,  # type: ignore[attr-defined]
     timeout_secs: int | None = None,
     no_output_timeout_secs: int | None = None,
     capture: bool = False,
     **kwds,
-):
-    def protocol_factory():
+) -> Process:
+    def protocol_factory() -> SubprocessStreamProtocol:
         return SubprocessStreamProtocol(limit=limit, loop=loop, capture=capture)
 
     loop = asyncio.events.get_running_loop()
@@ -186,28 +193,29 @@ async def _create_subprocess_exec(
     )
 
 
-def _handle_signal(proc, sig):
-    if sig in proc._handled_signals:
-        log.info(f"\nCaught {sig.name} again, killing the process ...")
+def _handle_signal(proc: Process, sig: signal.Signals) -> None:
+    if sig in proc._handled_signals:  # type: ignore[attr-defined]
+        log.info("\nCaught %s again, killing the process ...", sig.name)
         proc.kill()
         return
     log.info(
-        f"\nCaught {sig.name}, terminating process ....\nSend {sig.name} again to kill the process."
+        "\nCaught %(signame)s, terminating process ....\n"
+        "Send %(signame)s again to kill the process.",
+        extra={"signame": sig.name},
     )
-    proc._handled_signals.append(sig)
+    proc._handled_signals.append(sig)  # type: ignore[attr-defined]
     proc.terminate()
 
 
 async def _subprocess_run(
-    future,
-    cmdline,
-    check=True,
+    future: asyncio.Future[subprocess.CompletedProcess[bytes]],
+    cmdline: list[str] | tuple[str, ...],
     timeout_secs: int | None = None,
     no_output_timeout_secs: int | None = None,
     capture: bool = False,
     interactive: bool = False,
     **kwargs,
-):
+) -> None:
     stdout = subprocess.PIPE
     stderr = subprocess.PIPE
     if interactive is False:
@@ -227,28 +235,29 @@ async def _subprocess_run(
         capture=capture,
         **kwargs,
     )
-    proc._handled_signals = []
+    proc._handled_signals = []  # type: ignore[attr-defined]
     loop = asyncio.get_running_loop()
     for signame in ("SIGINT", "SIGTERM"):
         sig = getattr(signal, signame)
-        try:
+        with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(sig, partial(_handle_signal, proc, sig))
-        except NotImplementedError:
-            # On Windows, `add_signal_handler` is not defined, so we catch and ignore
-            pass
-    stdout, stderr = await asyncio.shield(proc.communicate())
-    result = subprocess.CompletedProcess(
+
+    proc_stdout, proc_stderr = await asyncio.shield(proc.communicate())
+    if TYPE_CHECKING:
+        assert proc.returncode
+    returncode: int = proc.returncode
+    result: subprocess.CompletedProcess[bytes] = subprocess.CompletedProcess(
         args=cmdline,
-        stdout=stdout,
-        stderr=stderr,
-        returncode=proc.returncode,
+        stdout=proc_stdout,
+        stderr=proc_stderr,
+        returncode=returncode,
     )
     future.set_result(result)
 
 
 def run(
-    *cmdline,
-    check=True,
+    *cmdline: str,
+    check: bool = True,
     timeout_secs: int | None = None,
     no_output_timeout_secs: int | None = None,
     capture: bool = False,
@@ -263,9 +272,8 @@ def run(
     try:
         loop.run_until_complete(
             _subprocess_run(
-                future,
-                cmdline,
-                check,
+                future=future,
+                cmdline=cmdline,
                 timeout_secs=timeout_secs,
                 no_output_timeout_secs=no_output_timeout_secs,
                 capture=capture,

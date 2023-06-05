@@ -1,9 +1,10 @@
-import os
-import shutil
 import gzip
+import os
 import pathlib
-import tempfile
+import shutil
 import tarfile
+import tempfile
+
 import nox
 from nox.command import CommandFailed
 
@@ -128,27 +129,25 @@ class Recompress:
         d_src.mkdir()
         d_tar = tempd.joinpath(targz.stem)
         d_targz = tempd.joinpath(targz.name)
-        with tarfile.open(d_tar, "w|") as wfile:
-            with tarfile.open(targz, "r:gz") as rfile:
-                rfile.extractall(d_src)
-                extracted_dir = next(pathlib.Path(d_src).iterdir())
-                for name in sorted(extracted_dir.rglob("*")):
-                    wfile.add(
-                        str(name),
-                        filter=self.tar_reset,
-                        recursive=False,
-                        arcname=str(name.relative_to(d_src)),
-                    )
+        with tarfile.open(d_tar, "w|") as wfile, tarfile.open(targz, "r:gz") as rfile:
+            rfile.extractall(d_src)
+            extracted_dir = next(pathlib.Path(d_src).iterdir())
+            for name in sorted(extracted_dir.rglob("*")):
+                wfile.add(
+                    str(name),
+                    filter=self.tar_reset,
+                    recursive=False,
+                    arcname=str(name.relative_to(d_src)),
+                )
 
-        with open(d_tar, "rb") as rfh:
-            with gzip.GzipFile(
-                fileobj=open(d_targz, "wb"), mode="wb", filename="", mtime=self.mtime
-            ) as gz:
-                while True:
-                    chunk = rfh.read(1024)
-                    if not chunk:
-                        break
-                    gz.write(chunk)
+        with open(d_tar, "rb") as rfh, gzip.GzipFile(
+            fileobj=open(d_targz, "wb"), mode="wb", filename="", mtime=self.mtime
+        ) as gz:
+            while True:
+                chunk = rfh.read(1024)
+                if not chunk:
+                    break
+                gz.write(chunk)
         targz.unlink()
         shutil.move(str(d_targz), str(targz))
 

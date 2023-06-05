@@ -17,11 +17,11 @@ class LevelFilter(logging.Filter):
         self,
         level: int | None = None,
         not_levels: list[int] | tuple[int, ...] | None = None,
-    ):
+    ) -> None:
         self.level = level
         self.not_levels = not_levels or []
 
-    def filter(self, record: logging.LogRecord) -> bool:
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
         if self.not_levels and record.levelno in self.not_levels:
             return False
         if self.level and record.levelno != self.level:
@@ -30,11 +30,15 @@ class LevelFilter(logging.Filter):
 
 
 class DuplicateTimesFormatter(logging.Formatter):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._last_timestamp: str | None = None
 
-    def formatTime(self, record, datefmt=None):
+    def formatTime(
+        self,
+        record: logging.LogRecord,
+        datefmt: str | None = None,
+    ) -> str:
         formatted_time = super().formatTime(record, datefmt=datefmt)
         if self._last_timestamp and formatted_time == self._last_timestamp:
             formatted_time = " " * len(formatted_time)
@@ -42,7 +46,7 @@ class DuplicateTimesFormatter(logging.Formatter):
             self._last_timestamp = formatted_time
         return formatted_time
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:  # noqa: A003
         if "\r\n" in record.msg:
             line_split = "\r\n"
         else:
@@ -62,10 +66,10 @@ class DuplicateTimesFormatter(logging.Formatter):
 
 
 class LoggingClass(logging.Logger):
-    def stderr(self, msg, *args, **kwargs):
+    def stderr(self, msg: str, *args, **kwargs):  # noqa: ANN201
         return self.log(STDERR, msg, *args, **kwargs)
 
-    def stdout(self, msg, *args, **kwargs):
+    def stdout(self, msg: str, *args, **kwargs):  # noqa: ANN201
         return self.log(STDOUT, msg, *args, **kwargs)
 
 
@@ -106,7 +110,4 @@ def include_timestamps() -> bool:
     """
     Return True if any of the configured logging handlers includes timestamps.
     """
-    for handler in logging.root.handlers:
-        if handler.formatter is TIMESTAMP_FORMATTER:
-            return True
-    return False
+    return any(handler.formatter is TIMESTAMP_FORMATTER for handler in logging.root.handlers)
