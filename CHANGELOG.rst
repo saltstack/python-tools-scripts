@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.16.2 (2023-06-05)
+===================
+
+Bug Fixes
+---------
+
+- Don't force the default virtualenv to `system_site_packages=True` (`#38 <https://github.com/s0undt3ch/python-tools-scripts/issues/38>`_)
+
+
 0.16.1 (2023-06-05)
 ===================
 
