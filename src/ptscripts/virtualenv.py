@@ -176,7 +176,11 @@ class VirtualEnv:
         if self.system_site_packages:
             cmd.append("--system-site-packages")
         cmd.append(str(self.venv_dir))
-        self.ctx.info(f"Creating virtualenv({self.name}) in {self.venv_dir.relative_to(CWD)}")
+        try:
+            relative_venv_path = self.venv_dir.relative_to(CWD)
+        except ValueError:
+            relative_venv_path = self.venv_dir
+        self.ctx.info(f"Creating virtualenv({self.name}) in {relative_venv_path}")
         self.run(*cmd, cwd=str(self.venv_dir.parent))
         self.install(
             "-U",
