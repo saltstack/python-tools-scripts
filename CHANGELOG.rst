@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.16.1 (2023-06-05)
+===================
+
+Bug Fixes
+---------
+
+- Properly handle non relative paths (`#37 <https://github.com/s0undt3ch/python-tools-scripts/issues/37>`_)
+
+
 0.16.0 (2023-06-05)
 ===================
 
