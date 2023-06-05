@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.17.0 (2023-06-05)
+===================
+
+Improvements
+------------
+
+- Add support for just default requirements configs (`#39 <https://github.com/s0undt3ch/python-tools-scripts/issues/39>`_)
+
+
 0.16.2 (2023-06-05)
 ===================
 
