@@ -4,7 +4,6 @@ Python tools scripts CLI parser.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import importlib
 import inspect
 import logging
@@ -16,7 +15,6 @@ import typing
 from contextlib import AbstractContextManager
 from contextlib import contextmanager
 from contextlib import nullcontext
-from functools import cached_property
 from functools import partial
 from subprocess import CompletedProcess
 from types import FunctionType
@@ -28,18 +26,15 @@ from typing import NoReturn
 from typing import TypeVar
 from typing import cast
 
-import attr
 import requests
 import rich
 from rich.console import Console
 from rich.theme import Theme
 
-from ptscripts import CWD
 from ptscripts import logs
 from ptscripts import process
 from ptscripts.virtualenv import VirtualEnv
 from ptscripts.virtualenv import VirtualEnvConfig
-from ptscripts.virtualenv import _cast_to_pathlib_path
 
 if sys.version_info < (3, 10):
     from typing_extensions import Concatenate
@@ -75,15 +70,6 @@ Param = ParamSpec("Param")
 RetType = TypeVar("RetType")
 OriginalFunc = Callable[Param, RetType]
 DecoratedFunc = Callable[Concatenate[str, Param], RetType]
-
-if "TOOLS_SCRIPTS_PATH" in os.environ:
-    TOOLS_SCRIPTS_PATH = pathlib.Path(os.environ["TOOLS_SCRIPTS_PATH"]).resolve()
-else:
-    TOOLS_SCRIPTS_PATH = CWD
-
-TOOLS_BASE_PATH = TOOLS_SCRIPTS_PATH / ".tools"
-TOOLS_DEPS_PATH = TOOLS_BASE_PATH / "deps"
-
 
 log = logging.getLogger(__name__)
 
@@ -293,122 +279,33 @@ class Context:
         return requests.Session()
 
 
-@attr.s(frozen=True)
-class DefaultRequirementsConfig:
-    """
-    Default tools requirements configuration typing.
-    """
-
-    requirements: list[str] = attr.ib(factory=list)
-    requirements_files: list[pathlib.Path] = attr.ib(factory=list)
-    pip_args: list[str] = attr.ib(factory=list)
-    base_tools_dir: pathlib.Path = attr.ib(init=False)
-    deps_dir: pathlib.Path = attr.ib(init=False)
-
-    @base_tools_dir.default
-    def _default_base_tools_dir(self) -> pathlib.Path:
-        base_tools_path = TOOLS_SCRIPTS_PATH / ".tools"
-        base_tools_path.mkdir(exist_ok=True)
-        return base_tools_path
-
-    @deps_dir.default
-    def _default_deps_dir(self) -> pathlib.Path:
-        default_deps_dir = self.base_tools_dir / "deps"
-        default_deps_dir.mkdir(exist_ok=True)
-        return default_deps_dir
-
-    @cached_property
-    def requirements_hash(self) -> str:
-        """
-        Returns a sha256 hash of the requirements.
-        """
-        requirements_hash = hashlib.sha256()
-        hash_seed = os.environ.get("TOOLS_VIRTUALENV_CACHE_SEED", "")
-        requirements_hash.update(hash_seed.encode())
-        if self.pip_args:
-            for argument in self.pip_args:
-                requirements_hash.update(argument.encode())
-        if self.requirements:
-            for requirement in sorted(self.requirements):
-                requirements_hash.update(requirement.encode())
-        if self.requirements_files:
-            for fpath in sorted(self.requirements_files):
-                with _cast_to_pathlib_path(fpath).open("rb") as rfh:
-                    try:
-                        digest = hashlib.file_digest(rfh, "sha256")  # type: ignore[attr-defined]
-                    except AttributeError:
-                        # Python < 3.11
-                        buf = bytearray(2**18)  # Reusable buffer to reduce allocations.
-                        view = memoryview(buf)
-                        digest = hashlib.sha256()
-                        while True:
-                            size = rfh.readinto(buf)
-                            if size == 0:
-                                break  # EOF
-                            digest.update(view[:size])
-                    requirements_hash.update(digest.digest())
-        return requirements_hash.hexdigest()
-
-    def install(self, ctx: Context) -> None:
-        """
-        Install default requirements.
-        """
-        requirements_hash_file = self.deps_dir / ".requirements.hash"
-        if (
-            requirements_hash_file.exists()
-            and requirements_hash_file.read_text() == self.requirements_hash
-        ):
-            # Requirements are up to date
-            ctx.debug("Base tools requirements haven't changed.")
-            return
-        requirements = []
-        if self.requirements_files:
-            for fpath in self.requirements_files:
-                requirements.extend(["-r", str(fpath)])
-        if self.requirements:
-            requirements.extend(self.requirements)
-        if requirements:
-            ctx.info("Installing base tools requirements ...")
-            ctx.run(
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                "--prefix",
-                str(self.deps_dir),
-                *self.pip_args,
-                *requirements,
-            )
-        requirements_hash_file.write_text(self.requirements_hash)
-
-
-class DefaultToolsPythonRequirements:
+class DefaultVirtualEnv:
     """
     Simple class to hold registered imports.
     """
 
-    _instance: DefaultToolsPythonRequirements | None = None
-    reqs_config: DefaultRequirementsConfig | None
+    _instance: DefaultVirtualEnv | None = None
+    venv_config: VirtualEnvConfig | None
 
-    def __new__(cls) -> DefaultToolsPythonRequirements:
+    def __new__(cls) -> DefaultVirtualEnv:
         """
         Method that instantiates a singleton class and returns it.
         """
         if cls._instance is None:
             instance = super().__new__(cls)
-            instance.reqs_config = None
+            instance.venv_config = None
             cls._instance = instance
         return cls._instance
 
     @classmethod
-    def set_default_requirements_config(cls, reqs_config: DefaultRequirementsConfig) -> None:
+    def set_default_virtualenv_config(cls, venv_config: VirtualEnvConfig) -> None:
         """
         Set the default tools requirements configuration.
         """
         instance = cls._instance
         if instance is None:
             instance = cls()
-        instance.reqs_config = reqs_config
+        instance.venv_config = venv_config
 
 
 class RegisteredImports:
@@ -547,25 +444,33 @@ class Parser:
         return cls._instance
 
     def _process_registered_tool_modules(self) -> None:
-        default_reqs_config = DefaultToolsPythonRequirements().reqs_config
-        if default_reqs_config:
-            default_reqs_config.install(self.context)
-        for module_name, venv_config in RegisteredImports():
-            venv: VirtualEnv | AbstractContextManager[None]
-            if venv_config:
-                if "name" not in venv_config:
-                    venv_config["name"] = module_name
-                venv = VirtualEnv(ctx=self.context, **venv_config)
-            else:
-                venv = nullcontext()
-            with venv:
-                try:
-                    importlib.import_module(module_name)
-                except ImportError as exc:
-                    if os.environ.get("TOOLS_IGNORE_IMPORT_ERRORS", "0") == "0":
-                        self.context.warn(
-                            f"Could not import the registered tools module {module_name!r}: {exc}"
-                        )
+        default_venv: VirtualEnv | AbstractContextManager[None]
+        default_venv_config = DefaultVirtualEnv().venv_config
+        if default_venv_config:
+            if "name" not in default_venv_config:
+                default_venv_config["name"] = "default"
+            default_venv_config["system_site_packages"] = True
+            default_venv_config["add_as_extra_site_packages"] = True
+            default_venv = VirtualEnv(ctx=self.context, **default_venv_config)
+        else:
+            default_venv = nullcontext()
+        with default_venv:
+            for module_name, venv_config in RegisteredImports():
+                venv: VirtualEnv | AbstractContextManager[None]
+                if venv_config:
+                    if "name" not in venv_config:
+                        venv_config["name"] = module_name
+                    venv = VirtualEnv(ctx=self.context, **venv_config)
+                else:
+                    venv = nullcontext()
+                with venv:
+                    try:
+                        importlib.import_module(module_name)
+                    except ImportError as exc:
+                        if os.environ.get("TOOLS_IGNORE_IMPORT_ERRORS", "0") == "0":
+                            self.context.warn(
+                                f"Could not import the registered tools module {module_name!r}: {exc}"
+                            )
 
     def parse_args(self) -> None:
         """

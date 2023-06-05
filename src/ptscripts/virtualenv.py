@@ -21,8 +21,6 @@ else:
 
 import attr
 
-from ptscripts import CWD
-
 if TYPE_CHECKING:
     from ptscripts.parser import Context
 
@@ -84,11 +82,10 @@ class VirtualEnv:
 
     @venv_dir.default
     def _default_venv_dir(self) -> pathlib.Path:
-        if "TOOLS_SCRIPTS_PATH" in os.environ:
-            base_path = pathlib.Path(os.environ["TOOLS_SCRIPTS_PATH"])
-        else:
-            base_path = CWD
-        venvs_path = base_path / ".tools" / "venvs"
+        # Late import to avoid circular import errors
+        from ptscripts.__main__ import TOOLS_VENVS_PATH
+
+        venvs_path = TOOLS_VENVS_PATH
         venvs_path.mkdir(parents=True, exist_ok=True)
         return venvs_path / self.name
 
@@ -158,6 +155,9 @@ class VirtualEnv:
         self.venv_dir.joinpath(".requirements.hash").write_text(self.requirements_hash)
 
     def _create_virtualenv(self) -> None:
+        # Late import to avoid circular import errors
+        from ptscripts.__main__ import CWD
+
         if self.venv_dir.exists():
             self.ctx.debug("Virtual environment path already exists")
             return
@@ -254,6 +254,9 @@ class VirtualEnv:
         """
         Run a command in the context of the virtual environment.
         """
+        # Late import to avoid circular import errors
+        from ptscripts.__main__ import CWD
+
         kwargs.setdefault("cwd", CWD)
         env = kwargs.pop("env", None)
         environ = self.environ.copy()

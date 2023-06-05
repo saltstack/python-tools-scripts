@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import logging
 import os
+import pathlib
 import sys
 from typing import NoReturn
 
-from ptscripts.parser import TOOLS_DEPS_PATH
 from ptscripts.parser import Parser
 
-if str(TOOLS_DEPS_PATH) in sys.path and sys.path[0] != str(TOOLS_DEPS_PATH):
-    sys.path.remove(str(TOOLS_DEPS_PATH))
-if TOOLS_DEPS_PATH not in sys.path:
-    sys.path.insert(0, str(TOOLS_DEPS_PATH))
+CWD: pathlib.Path = pathlib.Path.cwd()
+if "TOOLS_SCRIPTS_PATH" in os.environ:
+    _BASE_PATH = pathlib.Path(os.environ["TOOLS_SCRIPTS_PATH"]).expanduser()
+else:
+    _BASE_PATH = CWD
+TOOLS_VENVS_PATH = _BASE_PATH / ".tools-venvs"
+
+DEFAULT_TOOLS_VENV_PATH = TOOLS_VENVS_PATH / "default"
+if str(DEFAULT_TOOLS_VENV_PATH) in sys.path:
+    sys.path.remove(str(DEFAULT_TOOLS_VENV_PATH))
 
 log = logging.getLogger(__name__)
 
