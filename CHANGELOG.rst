@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.16.0 (2023-06-05)
+===================
+
+Improvements
+------------
+
+- Switch to [ruff](https://github.com/charliermarsh/ruff) (`#36 <https://github.com/s0undt3ch/python-tools-scripts/issues/36>`_)
+
+
 0.15.0 (2023-05-31)
 ===================
 
