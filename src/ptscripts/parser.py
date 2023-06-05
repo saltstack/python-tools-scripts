@@ -449,7 +449,6 @@ class Parser:
         if default_venv_config:
             if "name" not in default_venv_config:
                 default_venv_config["name"] = "default"
-            default_venv_config["system_site_packages"] = True
             default_venv_config["add_as_extra_site_packages"] = True
             default_venv = VirtualEnv(ctx=self.context, **default_venv_config)
         else:
