@@ -4,6 +4,7 @@ Python tools scripts CLI parser.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import inspect
 import logging
@@ -15,6 +16,7 @@ import typing
 from contextlib import AbstractContextManager
 from contextlib import contextmanager
 from contextlib import nullcontext
+from functools import cached_property
 from functools import partial
 from subprocess import CompletedProcess
 from types import FunctionType
@@ -26,6 +28,7 @@ from typing import NoReturn
 from typing import TypeVar
 from typing import cast
 
+import attr
 import requests
 import rich
 from rich.console import Console
@@ -35,6 +38,7 @@ from ptscripts import logs
 from ptscripts import process
 from ptscripts.virtualenv import VirtualEnv
 from ptscripts.virtualenv import VirtualEnvConfig
+from ptscripts.virtualenv import _cast_to_pathlib_path
 
 if sys.version_info < (3, 10):
     from typing_extensions import Concatenate
@@ -97,6 +101,82 @@ class FullArgumentOptions(ArgumentOptions):
 
     dest: str
     type: type[Any]
+
+
+@attr.s(frozen=True)
+class DefaultRequirementsConfig:
+    """
+    Default tools requirements configuration typing.
+    """
+
+    requirements: list[str] = attr.ib(factory=list)
+    requirements_files: list[pathlib.Path] = attr.ib(factory=list)
+    pip_args: list[str] = attr.ib(factory=list)
+
+    @cached_property
+    def requirements_hash(self) -> str:
+        """
+        Returns a sha256 hash of the requirements.
+        """
+        requirements_hash = hashlib.sha256()
+        hash_seed = os.environ.get("TOOLS_VIRTUALENV_CACHE_SEED", "")
+        requirements_hash.update(hash_seed.encode())
+        if self.pip_args:
+            for argument in self.pip_args:
+                requirements_hash.update(argument.encode())
+        if self.requirements:
+            for requirement in sorted(self.requirements):
+                requirements_hash.update(requirement.encode())
+        if self.requirements_files:
+            for fpath in sorted(self.requirements_files):
+                with _cast_to_pathlib_path(fpath).open("rb") as rfh:
+                    try:
+                        digest = hashlib.file_digest(rfh, "sha256")  # type: ignore[attr-defined]
+                    except AttributeError:
+                        # Python < 3.11
+                        buf = bytearray(2**18)  # Reusable buffer to reduce allocations.
+                        view = memoryview(buf)
+                        digest = hashlib.sha256()
+                        while True:
+                            size = rfh.readinto(buf)
+                            if size == 0:
+                                break  # EOF
+                            digest.update(view[:size])
+                    requirements_hash.update(digest.digest())
+        return requirements_hash.hexdigest()
+
+    def install(self, ctx: Context) -> None:
+        """
+        Install default requirements.
+        """
+        from ptscripts.__main__ import TOOLS_VENVS_PATH
+
+        requirements_hash_file = TOOLS_VENVS_PATH / ".default-requirements.hash"
+        if (
+            requirements_hash_file.exists()
+            and requirements_hash_file.read_text() == self.requirements_hash
+        ):
+            # Requirements are up to date
+            ctx.debug("Base tools requirements haven't changed.")
+            return
+        requirements = []
+        if self.requirements_files:
+            for fpath in self.requirements_files:
+                requirements.extend(["-r", str(fpath)])
+        if self.requirements:
+            requirements.extend(self.requirements)
+        if requirements:
+            ctx.info("Installing base tools requirements ...")
+            ctx.run(
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                *self.pip_args,
+                *requirements,
+            )
+        requirements_hash_file.parent.mkdir(parents=True, exist_ok=True)
+        requirements_hash_file.write_text(self.requirements_hash)
 
 
 class Context:
@@ -308,6 +388,35 @@ class DefaultVirtualEnv:
         instance.venv_config = venv_config
 
 
+class DefaultToolsPythonRequirements:
+    """
+    Simple class to hold registered imports.
+    """
+
+    _instance: DefaultToolsPythonRequirements | None = None
+    reqs_config: DefaultRequirementsConfig | None
+
+    def __new__(cls) -> DefaultToolsPythonRequirements:
+        """
+        Method that instantiates a singleton class and returns it.
+        """
+        if cls._instance is None:
+            instance = super().__new__(cls)
+            instance.reqs_config = None
+            cls._instance = instance
+        return cls._instance
+
+    @classmethod
+    def set_default_requirements_config(cls, reqs_config: DefaultRequirementsConfig) -> None:
+        """
+        Set the default tools requirements configuration.
+        """
+        instance = cls._instance
+        if instance is None:
+            instance = cls()
+        instance.reqs_config = reqs_config
+
+
 class RegisteredImports:
     """
     Simple class to hold registered imports.
@@ -444,6 +553,10 @@ class Parser:
         return cls._instance
 
     def _process_registered_tool_modules(self) -> None:
+        default_reqs_config = DefaultToolsPythonRequirements().reqs_config
+        if default_reqs_config:
+            default_reqs_config.install(self.context)
+
         default_venv: VirtualEnv | AbstractContextManager[None]
         default_venv_config = DefaultVirtualEnv().venv_config
         if default_venv_config:
