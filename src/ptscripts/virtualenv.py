@@ -242,6 +242,7 @@ class VirtualEnv:
             except subprocess.CalledProcessError:
                 msg = "Failed to create virtualenv"
                 raise AssertionError(msg) from None
+            self._install_requirements()
         self._add_as_extra_site_packages()
         return self
 
