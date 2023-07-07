@@ -1,0 +1,1 @@
+Fix traceback thrown during install reqs for virtualenv(changelog)
