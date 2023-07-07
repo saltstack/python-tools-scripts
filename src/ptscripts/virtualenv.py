@@ -232,7 +232,16 @@ class VirtualEnv:
         except subprocess.CalledProcessError:
             msg = "Failed to create virtualenv"
             raise AssertionError(msg) from None
-        self._install_requirements()
+        try:
+            self._install_requirements()
+        except FileNotFoundError:
+            # attempt to fix the virtualenv. delete and start over
+            shutil.rmtree(str(self.venv_dir))
+            try:
+                self._create_virtualenv()
+            except subprocess.CalledProcessError:
+                msg = "Failed to create virtualenv"
+                raise AssertionError(msg) from None
         self._add_as_extra_site_packages()
         return self
 
