@@ -1,1 +1,0 @@
-Switch to `RawDescriptionHelpFormatter` as the formatter class. This will help to include properly indented examples.

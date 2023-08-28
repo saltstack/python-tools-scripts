@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.18.1 (2023-08-28)
+===================
+
+Features
+--------
+
+- Switch to `RawDescriptionHelpFormatter` as the formatter class. This will help to include properly indented examples. (`#42 <https://github.com/s0undt3ch/python-tools-scripts/issues/42>`_)
+
+
 0.18.0 (2023-08-28)
 ===================
 
