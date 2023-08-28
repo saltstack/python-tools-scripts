@@ -489,6 +489,7 @@ class Parser:
                 description="Python Tools Scripts",
                 epilog="These tools are discovered under `<repo-root>/tools`.",
                 allow_abbrev=False,
+                formatter_class=argparse.RawDescriptionHelpFormatter,
             )
             instance.parser.add_argument("--version", action="version", version=__version__)
             log_group = instance.parser.add_argument_group("Logging")
@@ -700,6 +701,7 @@ class CommandGroup:
             name.replace("_", "-"),
             help=help,
             description=description,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
         )
         self.subparsers = self.parser.add_subparsers(
             title="Commands",
@@ -743,7 +745,12 @@ class CommandGroup:
             description = inspect.getdoc(func)
         if help is None and description is not None:
             help = description.splitlines()[0]
-        command = self.subparsers.add_parser(name=name, help=help, description=description)
+        command = self.subparsers.add_parser(
+            name=name,
+            help=help,
+            description=description,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
 
         signature = inspect.signature(func)
 
