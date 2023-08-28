@@ -13,6 +13,15 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.18.0 (2023-08-28)
+===================
+
+Bug Fixes
+---------
+
+- Fix traceback thrown during install reqs for virtualenv(changelog) (`#40 <https://github.com/s0undt3ch/python-tools-scripts/issues/40>`_)
+
+
 0.17.0 (2023-06-05)
 ===================
 
