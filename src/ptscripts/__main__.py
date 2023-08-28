@@ -13,7 +13,7 @@ if "TOOLS_SCRIPTS_PATH" in os.environ:
     _BASE_PATH = pathlib.Path(os.environ["TOOLS_SCRIPTS_PATH"]).expanduser()
 else:
     _BASE_PATH = CWD
-TOOLS_VENVS_PATH = _BASE_PATH / ".tools-venvs"
+TOOLS_VENVS_PATH = _BASE_PATH / ".tools-venvs" / "py{}.{}".format(*sys.version_info)
 
 DEFAULT_TOOLS_VENV_PATH = TOOLS_VENVS_PATH / "default"
 if str(DEFAULT_TOOLS_VENV_PATH) in sys.path:
