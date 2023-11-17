@@ -157,7 +157,10 @@ class DefaultRequirementsConfig:
             and requirements_hash_file.read_text() == self.requirements_hash
         ):
             # Requirements are up to date
-            ctx.debug("Base tools requirements haven't changed.")
+            ctx.debug(
+                f"Base tools requirements haven't changed. Hash file: '{requirements_hash_file}'; "
+                f"Hash: '{self.requirements_hash}'"
+            )
             return
         requirements = []
         if self.requirements_files:
@@ -177,6 +180,7 @@ class DefaultRequirementsConfig:
             )
         requirements_hash_file.parent.mkdir(parents=True, exist_ok=True)
         requirements_hash_file.write_text(self.requirements_hash)
+        ctx.debug(f"Wrote '{requirements_hash_file}' with contents: '{self.requirements_hash}'")
 
 
 class Context:
@@ -294,6 +298,7 @@ class Context:
 
         Either in a virtualenv context if one was configured or the system context.
         """
+        self.debug(f"""Running '{" ".join(cmdline)}'""")
         try:
             if self.venv:
                 return self.venv.run(
@@ -589,6 +594,8 @@ class Parser:
         """
         Parse CLI.
         """
+        # Log the argv getting executed
+        self.context.debug(f"Tools executing 'sys.argv': {sys.argv}")
         # Process registered imports to allow other modules to register commands
         self._process_registered_tool_modules()
         options = self.parser.parse_args()
