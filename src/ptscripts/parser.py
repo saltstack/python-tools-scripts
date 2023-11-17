@@ -119,14 +119,20 @@ class DefaultRequirementsConfig:
         Returns a sha256 hash of the requirements.
         """
         requirements_hash = hashlib.sha256()
+        # The first part of the hash should be the path to the tools executable
+        requirements_hash.update(sys.argv[0].encode())
+        # The second, TOOLS_VIRTUALENV_CACHE_SEED env variable, if set
         hash_seed = os.environ.get("TOOLS_VIRTUALENV_CACHE_SEED", "")
         requirements_hash.update(hash_seed.encode())
+        # Third, any custom pip cli argument defined
         if self.pip_args:
             for argument in self.pip_args:
                 requirements_hash.update(argument.encode())
+        # Forth, each passed requirement
         if self.requirements:
             for requirement in sorted(self.requirements):
                 requirements_hash.update(requirement.encode())
+        # And, lastly, any requirements files passed in
         if self.requirements_files:
             for fpath in sorted(self.requirements_files):
                 with _cast_to_pathlib_path(fpath).open("rb") as rfh:
