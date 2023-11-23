@@ -158,9 +158,25 @@ class VirtualEnv:
         # Late import to avoid circular import errors
         from ptscripts.__main__ import CWD
 
-        if self.venv_dir.exists():
-            self.ctx.debug("Virtual environment path already exists")
-            return
+        if self.venv_dir.exists() and self.venv_python.exists():
+            if not self.venv_python.exists():
+                try:
+                    relative_venv_path = self.venv_dir.relative_to(CWD)
+                except ValueError:
+                    relative_venv_path = self.venv_dir
+                try:
+                    relative_venv_python_path = self.venv_python.relative_to(CWD)
+                except ValueError:
+                    relative_venv_python_path = self.venv_python
+                self.ctx.warn(
+                    f"The virtual environment path '{relative_venv_path}' exists but the "
+                    f"python binary '{relative_venv_python_path}' does not. Deleting the "
+                    "virtual environment."
+                )
+                shutil.rmtree(self.venv_dir)
+            else:
+                self.ctx.debug("Virtual environment path already exists")
+                return
         virtualenv = shutil.which("virtualenv")
         if virtualenv:
             cmd = [
