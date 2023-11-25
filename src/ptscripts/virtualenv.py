@@ -158,7 +158,7 @@ class VirtualEnv:
         # Late import to avoid circular import errors
         from ptscripts.__main__ import CWD
 
-        if self.venv_dir.exists() and self.venv_python.exists():
+        if self.venv_dir.exists():
             if not self.venv_python.exists():
                 try:
                     relative_venv_path = self.venv_dir.relative_to(CWD)
