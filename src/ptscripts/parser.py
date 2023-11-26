@@ -228,27 +228,27 @@ class Context:
         """
         self.console_stdout.print(*args, **kwargs)
 
-    def debug(self, *args: str) -> None:
+    def debug(self, *args) -> None:
         """
         Print debug message to stderr.
         """
         if self._debug:
             self.console.log(*args, style="log-debug", _stack_offset=2)
 
-    def info(self, *args: str) -> None:
+    def info(self, *args) -> None:
         """
         Print info message to stderr.
         """
         if not self._quiet:
             self.console.log(*args, style="log-info", _stack_offset=2)
 
-    def warn(self, *args: str) -> None:
+    def warn(self, *args) -> None:
         """
         Print warning message to stderr.
         """
         self.console.log(*args, style="log-warning", _stack_offset=2)
 
-    def error(self, *args: str) -> None:
+    def error(self, *args) -> None:
         """
         Print error message to stderr.
         """
