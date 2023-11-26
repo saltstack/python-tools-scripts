@@ -134,12 +134,12 @@ class SubprocessStreamProtocol(asyncio.subprocess.SubprocessStreamProtocol):  # 
         self._capture: bool = capture
         self._last_write: datetime | None = None
 
-    def pipe_data_received(self, fd: int, data: bytes | str) -> None:  # noqa: D102
+    def pipe_data_received(self, fd: int, data: bytes | bytearray | str) -> None:  # noqa: D102
         self._last_write = datetime.now(tz=timezone.utc)
         if self._capture:
             super().pipe_data_received(fd, data)
             return
-        if isinstance(data, bytes):
+        if isinstance(data, (bytes, bytearray)):
             decoded_data = data.decode("utf-8")
         else:
             decoded_data = data
