@@ -13,6 +13,12 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.18.6 (2023-11-26)
+===================
+
+No significant changes.
+
+
 0.18.5 (2023-11-25)
 ===================
 
