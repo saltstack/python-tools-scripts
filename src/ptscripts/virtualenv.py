@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
-import pathlib
 import shutil
 import subprocess
 import sys
@@ -12,41 +10,15 @@ import textwrap
 from subprocess import CompletedProcess
 from typing import TYPE_CHECKING
 
-if sys.version_info < (3, 11):
-    from typing_extensions import NotRequired
-    from typing_extensions import TypedDict
-else:
-    from typing import NotRequired
-    from typing import TypedDict
-
 import attr
 
 if TYPE_CHECKING:
+    import pathlib
+
+    from ptscripts.models import VirtualEnvConfig
     from ptscripts.parser import Context
 
 log = logging.getLogger(__name__)
-
-
-class VirtualEnvConfig(TypedDict):
-    """
-    Virtualenv Configuration Typing.
-    """
-
-    name: NotRequired[str]
-    requirements: NotRequired[list[str]]
-    requirements_files: NotRequired[list[pathlib.Path]]
-    env: NotRequired[dict[str, str]]
-    system_site_packages: NotRequired[bool]
-    pip_requirement: NotRequired[str]
-    setuptools_requirement: NotRequired[str]
-    add_as_extra_site_packages: NotRequired[bool]
-    pip_args: NotRequired[list[str]]
-
-
-def _cast_to_pathlib_path(value: str | pathlib.Path) -> pathlib.Path:
-    if isinstance(value, pathlib.Path):
-        return value
-    return pathlib.Path(str(value))
 
 
 @attr.s(frozen=True, slots=True)
@@ -55,30 +27,13 @@ class VirtualEnv:
     Helper class to create and user virtual environments.
     """
 
-    name: str = attr.ib()
     ctx: Context = attr.ib()
-    requirements: list[str] | None = attr.ib(repr=False, default=None)
-    requirements_files: list[pathlib.Path] | None = attr.ib(repr=False, default=None)
-    env: dict[str, str] | None = attr.ib(default=None)
-    system_site_packages: bool = attr.ib(default=False)
-    pip_requirement: str = attr.ib(repr=False)
-    setuptools_requirement: str = attr.ib(repr=False)
-    add_as_extra_site_packages: bool = attr.ib(default=False)
-    pip_args: list[str] = attr.ib(factory=list, repr=False)
+    config: VirtualEnvConfig = attr.ib()
     environ: dict[str, str] = attr.ib(init=False, repr=False)
     venv_dir: pathlib.Path = attr.ib(init=False)
     venv_python: pathlib.Path = attr.ib(init=False, repr=False)
     venv_bin_dir: pathlib.Path = attr.ib(init=False, repr=False)
     requirements_hash: str = attr.ib(init=False, repr=False)
-
-    @pip_requirement.default
-    def _default_pip_requiremnt(self) -> str:
-        return "pip>=22.3.1,<23.0"
-
-    @setuptools_requirement.default
-    def _default_setuptools_requirement(self) -> str:
-        # https://github.com/pypa/setuptools/commit/137ab9d684075f772c322f455b0dd1f992ddcd8f
-        return "setuptools>=65.6.3,<66"
 
     @venv_dir.default
     def _default_venv_dir(self) -> pathlib.Path:
@@ -87,13 +42,13 @@ class VirtualEnv:
 
         venvs_path = TOOLS_VENVS_PATH
         venvs_path.mkdir(parents=True, exist_ok=True)
-        return venvs_path / self.name
+        return venvs_path / self.config.name
 
     @environ.default
     def _default_environ(self) -> dict[str, str]:
         environ = os.environ.copy()
-        if self.env:
-            environ.update(self.env)
+        if self.config.env:
+            environ.update(self.config.env)
         return environ
 
     @venv_python.default
@@ -108,31 +63,7 @@ class VirtualEnv:
 
     @requirements_hash.default
     def __default_requirements_hash(self) -> str:
-        requirements_hash = hashlib.sha256(self.name.encode())
-        hash_seed = os.environ.get("TOOLS_VIRTUALENV_CACHE_SEED", "")
-        requirements_hash.update(hash_seed.encode())
-        if self.pip_args:
-            requirements_hash.update(str(sorted(self.pip_args)).encode())
-        if self.requirements:
-            for requirement in sorted(self.requirements):
-                requirements_hash.update(requirement.encode())
-        if self.requirements_files:
-            for fpath in sorted(self.requirements_files):
-                with _cast_to_pathlib_path(fpath).open("rb") as rfh:
-                    try:
-                        digest = hashlib.file_digest(rfh, "sha256")  # type: ignore[attr-defined]
-                    except AttributeError:
-                        # Python < 3.11
-                        buf = bytearray(2**18)  # Reusable buffer to reduce allocations.
-                        view = memoryview(buf)
-                        digest = hashlib.sha256()
-                        while True:
-                            size = rfh.readinto(buf)
-                            if size == 0:
-                                break  # EOF
-                            digest.update(view[:size])
-                    requirements_hash.update(digest.digest())
-        return requirements_hash.hexdigest()
+        return self.config.get_config_hash()
 
     def _install_requirements(self) -> None:
         requirements_hash_file = self.venv_dir / ".requirements.hash"
@@ -141,17 +72,9 @@ class VirtualEnv:
             and requirements_hash_file.read_text() == self.requirements_hash
         ):
             # Requirements are up to date
-            self.ctx.debug(f"Requirements for virtualenv({self.name}) haven't changed.")
+            self.ctx.debug(f"Requirements for virtualenv({self.config.name}) haven't changed.")
             return
-        requirements = []
-        if self.requirements_files:
-            for fpath in sorted(self.requirements_files):
-                requirements.extend(["-r", str(fpath)])
-        if self.requirements:
-            requirements.extend(sorted(self.requirements))
-        if requirements:
-            self.ctx.info(f"Install requirements for virtualenv({self.name}) ...")
-            self.install(*self.pip_args, *requirements)
+        self.config.install(self.ctx, python_executable=str(self.venv_python))
         self.venv_dir.joinpath(".requirements.hash").write_text(self.requirements_hash)
 
     def _create_virtualenv(self) -> None:
@@ -189,24 +112,24 @@ class VirtualEnv:
                 "-m",
                 "venv",
             ]
-        if self.system_site_packages:
+        if self.config.system_site_packages:
             cmd.append("--system-site-packages")
         cmd.append(str(self.venv_dir))
         try:
             relative_venv_path = self.venv_dir.relative_to(CWD)
         except ValueError:
             relative_venv_path = self.venv_dir
-        self.ctx.info(f"Creating virtualenv({self.name}) in {relative_venv_path}")
+        self.ctx.info(f"Creating virtualenv({self.config.name}) in {relative_venv_path}")
         self.run(*cmd, cwd=str(self.venv_dir.parent))
         self.install(
             "-U",
             "wheel",
-            self.pip_requirement,
-            self.setuptools_requirement,
+            self.config.pip_requirement,
+            self.config.setuptools_requirement,
         )
 
     def _add_as_extra_site_packages(self) -> None:
-        if self.add_as_extra_site_packages is False:
+        if self.config.add_as_extra_site_packages is False:
             return
         ret = self.run_code(
             "import json,site; print(json.dumps(site.getsitepackages()))",
@@ -223,7 +146,7 @@ class VirtualEnv:
                 sys.path.append(path)
 
     def _remove_extra_site_packages(self) -> None:
-        if self.add_as_extra_site_packages is False:
+        if self.config.add_as_extra_site_packages is False:
             return
         ret = self.run_code(
             "import json,site; print(json.dumps(site.getsitepackages()))",
