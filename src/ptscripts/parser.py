@@ -4,7 +4,6 @@ Python tools scripts CLI parser.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import importlib
 import inspect
 import logging
@@ -16,7 +15,6 @@ import typing
 from contextlib import AbstractContextManager
 from contextlib import contextmanager
 from contextlib import nullcontext
-from functools import cached_property
 from functools import partial
 from subprocess import CompletedProcess
 from types import FunctionType
@@ -28,7 +26,6 @@ from typing import NoReturn
 from typing import TypeVar
 from typing import cast
 
-import attr
 import requests
 import rich
 from rich.console import Console
@@ -36,9 +33,8 @@ from rich.theme import Theme
 
 from ptscripts import logs
 from ptscripts import process
+from ptscripts.models import VirtualEnvConfig
 from ptscripts.virtualenv import VirtualEnv
-from ptscripts.virtualenv import VirtualEnvConfig
-from ptscripts.virtualenv import _cast_to_pathlib_path
 
 if sys.version_info < (3, 10):
     from typing_extensions import Concatenate
@@ -68,6 +64,8 @@ if TYPE_CHECKING:
     from argparse import Namespace
     from argparse import _SubParsersAction
     from collections.abc import Iterator
+
+    from ptscripts.models import DefaultConfig
 
 
 Param = ParamSpec("Param")
@@ -101,92 +99,6 @@ class FullArgumentOptions(ArgumentOptions):
 
     dest: str
     type: type[Any]
-
-
-@attr.s(frozen=True)
-class DefaultRequirementsConfig:
-    """
-    Default tools requirements configuration typing.
-    """
-
-    requirements: list[str] = attr.ib(factory=list)
-    requirements_files: list[pathlib.Path] = attr.ib(factory=list)
-    pip_args: list[str] = attr.ib(factory=list)
-
-    @cached_property
-    def requirements_hash(self) -> str:
-        """
-        Returns a sha256 hash of the requirements.
-        """
-        requirements_hash = hashlib.sha256()
-        # The first part of the hash should be the path to the tools executable
-        requirements_hash.update(sys.argv[0].encode())
-        # The second, TOOLS_VIRTUALENV_CACHE_SEED env variable, if set
-        hash_seed = os.environ.get("TOOLS_VIRTUALENV_CACHE_SEED", "")
-        requirements_hash.update(hash_seed.encode())
-        # Third, any custom pip cli argument defined
-        if self.pip_args:
-            for argument in self.pip_args:
-                requirements_hash.update(argument.encode())
-        # Forth, each passed requirement
-        if self.requirements:
-            for requirement in sorted(self.requirements):
-                requirements_hash.update(requirement.encode())
-        # And, lastly, any requirements files passed in
-        if self.requirements_files:
-            for fpath in sorted(self.requirements_files):
-                with _cast_to_pathlib_path(fpath).open("rb") as rfh:
-                    try:
-                        digest = hashlib.file_digest(rfh, "sha256")  # type: ignore[attr-defined]
-                    except AttributeError:
-                        # Python < 3.11
-                        buf = bytearray(2**18)  # Reusable buffer to reduce allocations.
-                        view = memoryview(buf)
-                        digest = hashlib.sha256()
-                        while True:
-                            size = rfh.readinto(buf)
-                            if size == 0:
-                                break  # EOF
-                            digest.update(view[:size])
-                    requirements_hash.update(digest.digest())
-        return requirements_hash.hexdigest()
-
-    def install(self, ctx: Context) -> None:
-        """
-        Install default requirements.
-        """
-        from ptscripts.__main__ import TOOLS_VENVS_PATH
-
-        requirements_hash_file = TOOLS_VENVS_PATH / ".default-requirements.hash"
-        if (
-            requirements_hash_file.exists()
-            and requirements_hash_file.read_text() == self.requirements_hash
-        ):
-            # Requirements are up to date
-            ctx.debug(
-                f"Base tools requirements haven't changed. Hash file: '{requirements_hash_file}'; "
-                f"Hash: '{self.requirements_hash}'"
-            )
-            return
-        requirements = []
-        if self.requirements_files:
-            for fpath in self.requirements_files:
-                requirements.extend(["-r", str(fpath)])
-        if self.requirements:
-            requirements.extend(self.requirements)
-        if requirements:
-            ctx.info("Installing base tools requirements ...")
-            ctx.run(
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                *self.pip_args,
-                *requirements,
-            )
-        requirements_hash_file.parent.mkdir(parents=True, exist_ok=True)
-        requirements_hash_file.write_text(self.requirements_hash)
-        ctx.debug(f"Wrote '{requirements_hash_file}' with contents: '{self.requirements_hash}'")
 
 
 class Context:
@@ -348,18 +260,15 @@ class Context:
                 os.chdir(cwd)
 
     @contextmanager
-    def virtualenv(
-        self,
-        name: str,
-        requirements: list[str] | None = None,
-        requirements_files: list[pathlib.Path] | None = None,
-    ) -> Iterator[VirtualEnv]:
+    def virtualenv(self, name: str, config: VirtualEnvConfig | None = None) -> Iterator[VirtualEnv]:
         """
         Create and use a virtual environment.
         """
-        with VirtualEnv(
-            ctx=self, name=name, requirements=requirements, requirements_files=requirements_files
-        ) as venv:
+        if config is None:
+            config = VirtualEnvConfig(name=name)
+        elif config.name is None:
+            config.name = name
+        with VirtualEnv(ctx=self, config=config) as venv:
             yield venv
 
     @property
@@ -405,7 +314,7 @@ class DefaultToolsPythonRequirements:
     """
 
     _instance: DefaultToolsPythonRequirements | None = None
-    reqs_config: DefaultRequirementsConfig | None
+    config: DefaultConfig | None
 
     def __new__(cls) -> DefaultToolsPythonRequirements:
         """
@@ -413,19 +322,19 @@ class DefaultToolsPythonRequirements:
         """
         if cls._instance is None:
             instance = super().__new__(cls)
-            instance.reqs_config = None
+            instance.config = None
             cls._instance = instance
         return cls._instance
 
     @classmethod
-    def set_default_requirements_config(cls, reqs_config: DefaultRequirementsConfig) -> None:
+    def set_default_requirements_config(cls, config: DefaultConfig) -> None:
         """
         Set the default tools requirements configuration.
         """
         instance = cls._instance
         if instance is None:
             instance = cls()
-        instance.reqs_config = reqs_config
+        instance.config = config
 
 
 class RegisteredImports:
@@ -565,26 +474,26 @@ class Parser:
         return cls._instance
 
     def _process_registered_tool_modules(self) -> None:
-        default_reqs_config = DefaultToolsPythonRequirements().reqs_config
-        if default_reqs_config:
-            default_reqs_config.install(self.context)
+        default_config = DefaultToolsPythonRequirements().config
+        if default_config:
+            default_config.install(self.context)
 
         default_venv: VirtualEnv | AbstractContextManager[None]
         default_venv_config = DefaultVirtualEnv().venv_config
         if default_venv_config:
-            if "name" not in default_venv_config:
-                default_venv_config["name"] = "default"
-            default_venv_config["add_as_extra_site_packages"] = True
-            default_venv = VirtualEnv(ctx=self.context, **default_venv_config)
+            if not default_venv_config.name:
+                default_venv_config.name = "default"
+            default_venv_config.add_as_extra_site_packages = True
+            default_venv = VirtualEnv(ctx=self.context, config=default_venv_config)
         else:
             default_venv = nullcontext()
         with default_venv:
             for module_name, venv_config in RegisteredImports():
                 venv: VirtualEnv | AbstractContextManager[None]
                 if venv_config:
-                    if "name" not in venv_config:
-                        venv_config["name"] = module_name
-                    venv = VirtualEnv(ctx=self.context, **venv_config)
+                    if not venv_config.name:
+                        venv_config.name = module_name
+                    venv = VirtualEnv(ctx=self.context, config=venv_config)
                 else:
                     venv = nullcontext()
                 with venv:
@@ -688,7 +597,7 @@ class CommandGroup:
         help: str,
         description: str | None = None,
         parent: Parser | CommandGroup | list[str] | tuple[str] | str | None = None,
-        venv_config: VirtualEnvConfig | None = None,
+        venv_config: VirtualEnvConfig | dict[str, Any] | None = None,
     ) -> None:
         self.name = name
         if description is None:
@@ -705,9 +614,14 @@ class CommandGroup:
             GroupReference.add_command((*parent, name), self)
             parent = GroupReference()[tuple(parent)]
 
-        if venv_config and "name" not in venv_config:
-            venv_config["name"] = self.name
-        self.venv_config = venv_config or {}
+        if venv_config is None:
+            venv_config = VirtualEnvConfig(name=self.name)
+        elif isinstance(venv_config, dict):
+            venv_config = VirtualEnvConfig(**venv_config)
+        if venv_config.name is None:
+            venv_config.name = self.name
+        self.venv_config: VirtualEnvConfig = venv_config
+
         if TYPE_CHECKING:
             assert parent
         self.parser = parent.subparsers.add_parser(  # type: ignore[union-attr, has-type]
@@ -886,11 +800,11 @@ class CommandGroup:
         bound = signature.bind_partial(*args, **kwargs)
         venv: VirtualEnv | None = None
         if venv_config:
-            if "name" not in venv_config:
-                venv_config["name"] = getattr(options, f"{self.name}_command")
-            venv = VirtualEnv(ctx=self.context, **venv_config)
+            if venv_config.name is None:
+                venv_config.name = getattr(options, f"{self.name}_command")
+            venv = VirtualEnv(ctx=self.context, config=venv_config)
         elif self.venv_config:
-            venv = VirtualEnv(ctx=self.context, **self.venv_config)
+            venv = VirtualEnv(ctx=self.context, config=self.venv_config)
         if venv:
             with venv:
                 previous_venv = self.context.venv
