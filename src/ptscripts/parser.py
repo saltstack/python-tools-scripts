@@ -260,13 +260,20 @@ class Context:
                 os.chdir(cwd)
 
     @contextmanager
-    def virtualenv(self, name: str, config: VirtualEnvConfig | None = None) -> Iterator[VirtualEnv]:
+    def virtualenv(
+        self, name: str, config: VirtualEnvConfig | dict[str, Any] | None = None
+    ) -> Iterator[VirtualEnv]:
         """
         Create and use a virtual environment.
         """
         if config is None:
             config = VirtualEnvConfig(name=name)
-        elif config.name is None:
+        elif isinstance(config, dict):
+            config = VirtualEnvConfig(**config)
+        if TYPE_CHECKING:
+            assert isinstance(config, VirtualEnvConfig)
+
+        if config.name is None:
             config.name = name
         with VirtualEnv(ctx=self, config=config) as venv:
             yield venv
@@ -597,7 +604,7 @@ class CommandGroup:
         help: str,
         description: str | None = None,
         parent: Parser | CommandGroup | list[str] | tuple[str] | str | None = None,
-        venv_config: VirtualEnvConfig | dict[str, Any] | None = None,
+        venv_config: VirtualEnvConfig | None = None,
     ) -> None:
         self.name = name
         if description is None:
@@ -614,13 +621,10 @@ class CommandGroup:
             GroupReference.add_command((*parent, name), self)
             parent = GroupReference()[tuple(parent)]
 
-        if venv_config is None:
-            venv_config = VirtualEnvConfig(name=self.name)
-        elif isinstance(venv_config, dict):
-            venv_config = VirtualEnvConfig(**venv_config)
-        if venv_config.name is None:
+        if venv_config is not None and venv_config.name is None:
             venv_config.name = self.name
-        self.venv_config: VirtualEnvConfig = venv_config
+
+        self.venv_config: VirtualEnvConfig | None = venv_config
 
         if TYPE_CHECKING:
             assert parent
@@ -644,7 +648,7 @@ class CommandGroup:
         help: str | None = None,
         description: str | None = None,
         arguments: dict[str, ArgumentOptions] | None = None,
-        venv_config: VirtualEnvConfig | None = None,
+        venv_config: VirtualEnvConfig | dict[str, Any] | None = None,
     ):
         """
         Register a sub-command in the command group.
@@ -766,6 +770,12 @@ class CommandGroup:
                 flags = [f"--{parameter.name.replace('_', '-')}"]
             log.debug("Adding Command %r. Flags: %s; KwArgs: %s", name, flags, kwargs)
             command.add_argument(*flags, **kwargs)  # type: ignore[arg-type]
+
+        if venv_config and isinstance(venv_config, dict):
+            venv_config = VirtualEnvConfig(**venv_config)
+        if TYPE_CHECKING:
+            assert isinstance(venv_config, VirtualEnvConfig)
+
         command.set_defaults(func=partial(self, func, venv_config=venv_config))
         return func
 
@@ -821,10 +831,14 @@ def command_group(
     name: str,
     help: str,
     description: str | None = None,
-    venv_config: VirtualEnvConfig | None = None,
+    venv_config: VirtualEnvConfig | dict[str, Any] | None = None,
     parent: Parser | CommandGroup | list[str] | tuple[str] | str | None = None,
 ) -> CommandGroup:
     """
     Create a new command group.
     """
+    if venv_config and isinstance(venv_config, dict):
+        venv_config = VirtualEnvConfig(**venv_config)
+    if TYPE_CHECKING:
+        assert isinstance(venv_config, VirtualEnvConfig)
     return CommandGroup(name, help, description=description, venv_config=venv_config, parent=parent)
