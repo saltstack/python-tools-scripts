@@ -13,6 +13,17 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.20.0rc2 (2024-02-21)
+======================
+
+Breaking Changes
+----------------
+
+- Added support for using poetry and it's requirements groups.
+
+  **THIS IS A BREAKING CHANGE AND ALL OLD CODE MUST BE UPDATED** (`#43 <https://github.com/s0undt3ch/python-tools-scripts/issues/43>`_)
+
+
 0.18.6 (2023-11-26)
 ===================
 
