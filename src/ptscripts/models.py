@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import pathlib
 import shutil
 import sys
 import tempfile
@@ -17,8 +18,6 @@ from ptscripts.utils import cast_to_pathlib_path
 from ptscripts.utils import file_digest
 
 if TYPE_CHECKING:
-    import pathlib
-
     from ptscripts.parser import Context
 
 
