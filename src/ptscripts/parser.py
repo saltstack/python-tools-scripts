@@ -34,6 +34,7 @@ from rich.theme import Theme
 from ptscripts import logs
 from ptscripts import process
 from ptscripts.models import VirtualEnvConfig
+from ptscripts.models import VirtualEnvPipConfig
 from ptscripts.virtualenv import VirtualEnv
 
 if sys.version_info < (3, 10):
@@ -260,19 +261,12 @@ class Context:
                 os.chdir(cwd)
 
     @contextmanager
-    def virtualenv(
-        self, name: str, config: VirtualEnvConfig | dict[str, Any] | None = None
-    ) -> Iterator[VirtualEnv]:
+    def virtualenv(self, name: str, config: VirtualEnvConfig | None = None) -> Iterator[VirtualEnv]:
         """
         Create and use a virtual environment.
         """
         if config is None:
-            config = VirtualEnvConfig(name=name)
-        elif isinstance(config, dict):
-            config = VirtualEnvConfig(**config)
-        if TYPE_CHECKING:
-            assert isinstance(config, VirtualEnvConfig)
-
+            config = VirtualEnvPipConfig(name=name)
         if config.name is None:
             config.name = name
         with VirtualEnv(ctx=self, config=config) as venv:
@@ -648,7 +642,7 @@ class CommandGroup:
         help: str | None = None,
         description: str | None = None,
         arguments: dict[str, ArgumentOptions] | None = None,
-        venv_config: VirtualEnvConfig | dict[str, Any] | None = None,
+        venv_config: VirtualEnvConfig | None = None,
     ):
         """
         Register a sub-command in the command group.
@@ -771,11 +765,6 @@ class CommandGroup:
             log.debug("Adding Command %r. Flags: %s; KwArgs: %s", name, flags, kwargs)
             command.add_argument(*flags, **kwargs)  # type: ignore[arg-type]
 
-        if venv_config and isinstance(venv_config, dict):
-            venv_config = VirtualEnvConfig(**venv_config)
-        if TYPE_CHECKING:
-            assert isinstance(venv_config, VirtualEnvConfig)
-
         command.set_defaults(func=partial(self, func, venv_config=venv_config))
         return func
 
@@ -831,14 +820,10 @@ def command_group(
     name: str,
     help: str,
     description: str | None = None,
-    venv_config: VirtualEnvConfig | dict[str, Any] | None = None,
+    venv_config: VirtualEnvConfig | None = None,
     parent: Parser | CommandGroup | list[str] | tuple[str] | str | None = None,
 ) -> CommandGroup:
     """
     Create a new command group.
     """
-    if venv_config and isinstance(venv_config, dict):
-        venv_config = VirtualEnvConfig(**venv_config)
-    if TYPE_CHECKING:
-        assert isinstance(venv_config, VirtualEnvConfig)
     return CommandGroup(name, help, description=description, venv_config=venv_config, parent=parent)

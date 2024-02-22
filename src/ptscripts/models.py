@@ -8,11 +8,9 @@ import sys
 import tempfile
 from functools import cached_property
 from typing import TYPE_CHECKING
-from typing import Any
 
 from pydantic import BaseModel
 from pydantic import Field
-from pydantic import model_validator
 
 from ptscripts.utils import cast_to_pathlib_path
 from ptscripts.utils import file_digest
@@ -21,7 +19,7 @@ if TYPE_CHECKING:
     from ptscripts.parser import Context
 
 
-class Pip(BaseModel):
+class _PipMixin(BaseModel):
     """
     Pip dependencies support.
     """
@@ -30,7 +28,7 @@ class Pip(BaseModel):
     requirements_files: list[pathlib.Path] = Field(default_factory=list)
     install_args: list[str] = Field(default_factory=list)
 
-    def get_config_hash(self) -> bytes:
+    def _get_config_hash(self) -> bytes:
         """
         Return a hash digest of the configuration.
         """
@@ -43,7 +41,7 @@ class Pip(BaseModel):
             config_hash.update(file_digest(cast_to_pathlib_path(fpath)))
         return config_hash.digest()
 
-    def install(self, ctx: Context, python_executable: str | None = None) -> None:
+    def _install(self, ctx: Context, python_executable: str | None = None) -> None:
         """
         Install requirements.
         """
@@ -66,7 +64,7 @@ class Pip(BaseModel):
         )
 
 
-class Poetry(BaseModel):
+class _PoetryMixin(BaseModel):
     """
     Poetry dependencies support.
     """
@@ -76,9 +74,9 @@ class Poetry(BaseModel):
     export_args: list[str] = Field(default_factory=list)
     install_args: list[str] = Field(default_factory=list)
 
-    def get_config_hash(self) -> bytes:
+    def _get_config_hash(self) -> bytes:
         """
-        Return a hash digest of the configuration.
+        Return a hash of the configuration.
         """
         config_hash = hashlib.sha256()
         config_hash.update(str(self.no_root).encode())
@@ -95,7 +93,7 @@ class Poetry(BaseModel):
         config_hash.update(file_digest(CWD / "poetry.lock"))
         return config_hash.digest()
 
-    def install(self, ctx: Context, python_executable: str | None = None) -> None:
+    def _install(self, ctx: Context, python_executable: str | None = None) -> None:
         """
         Install default requirements.
         """
@@ -132,16 +130,17 @@ class DefaultConfig(BaseModel):
     Default tools configuration model.
     """
 
-    pip: Pip = Field(default=None)
-    poetry: Poetry = Field(default=None)
+    def _get_config_hash(self) -> bytes:
+        """
+        Return a hash of the configuration.
+        """
+        raise NotImplementedError
 
-    @model_validator(mode="before")
-    @classmethod
-    def _pip_or_poetry_not_both(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "poetry" in data and "pip" in data:
-            msg = "Only configure 'pip' or 'poetry', not both."
-            raise ValueError(msg)
-        return data
+    def _install(self, ctx: Context, python_executable: str | None = None) -> None:
+        """
+        Install default requirements.
+        """
+        raise NotImplementedError
 
     @cached_property
     def config_hash(self) -> str:
@@ -154,11 +153,7 @@ class DefaultConfig(BaseModel):
         # The second, TOOLS_VIRTUALENV_CACHE_SEED env variable, if set
         hash_seed = os.environ.get("TOOLS_VIRTUALENV_CACHE_SEED", "")
         config_hash.update(hash_seed.encode())
-        if self.pip:
-            config_hash.update(self.pip.get_config_hash())
-        if self.poetry:
-            config_hash.update(self.poetry.get_config_hash())
-
+        config_hash.update(self._get_config_hash())
         return config_hash.hexdigest()
 
     def install(self, ctx: Context) -> None:
@@ -176,13 +171,23 @@ class DefaultConfig(BaseModel):
             )
             return
 
-        if self.pip:
-            self.pip.install(ctx)
-        if self.poetry:
-            self.poetry.install(ctx)
+        self._install(ctx)
+
         config_hash_file.parent.mkdir(parents=True, exist_ok=True)
         config_hash_file.write_text(self.config_hash)
         ctx.debug(f"Wrote '{config_hash_file}' with contents: '{self.config_hash}'")
+
+
+class DefaultPipConfig(_PipMixin, DefaultConfig):
+    """
+    Default tools pip configuration model.
+    """
+
+
+class DefaultPoetryConfig(_PoetryMixin, DefaultConfig):
+    """
+    Default tools poetry configuration model.
+    """
 
 
 class VirtualEnvConfig(BaseModel):
@@ -197,16 +202,18 @@ class VirtualEnvConfig(BaseModel):
     setuptools_requirement: str = Field(default="setuptools>=65.6.3,<66")
     poetry_requirement: str = Field(default=">=1.7")
     add_as_extra_site_packages: bool = Field(default=False)
-    pip: Pip = Field(default=None)
-    poetry: Poetry = Field(default=None)
 
-    @model_validator(mode="before")
-    @classmethod
-    def _pip_or_poetry_not_both(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "poetry" in data and "pip" in data:
-            msg = "Only configure 'pip' or 'poetry', not both."
-            raise ValueError(msg)
-        return data
+    def _get_config_hash(self) -> bytes:
+        """
+        Return a hash of the configuration.
+        """
+        raise NotImplementedError
+
+    def _install(self, ctx: Context, python_executable: str | None = None) -> None:
+        """
+        Install default requirements.
+        """
+        raise NotImplementedError
 
     def get_config_hash(self) -> str:
         """
@@ -218,19 +225,23 @@ class VirtualEnvConfig(BaseModel):
         # The second, TOOLS_VIRTUALENV_CACHE_SEED env variable, if set
         hash_seed = os.environ.get("TOOLS_VIRTUALENV_CACHE_SEED", "")
         config_hash.update(hash_seed.encode())
-        if self.pip:
-            config_hash.update(self.pip.get_config_hash())
-        if self.poetry:
-            config_hash.update(self.poetry.get_config_hash())
-
+        config_hash.update(self._get_config_hash())
         return config_hash.hexdigest()
 
     def install(self, ctx: Context, python_executable: str | None = None) -> None:
         """
         Install requirements.
         """
-        if self.pip:
-            return self.pip.install(ctx, python_executable=python_executable)
-        if self.poetry:
-            return self.poetry.install(ctx, python_executable=python_executable)
-        return None
+        return self._install(ctx, python_executable=python_executable)
+
+
+class VirtualEnvPipConfig(_PipMixin, VirtualEnvConfig):
+    """
+    Virtualenv pip configuration.
+    """
+
+
+class VirtualEnvPoetryConfig(_PoetryMixin, VirtualEnvConfig):
+    """
+    Virtualenv poetry configuration.
+    """
