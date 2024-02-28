@@ -1,0 +1,2 @@
+poetry >= 8.0
+poetry-plugin-export
