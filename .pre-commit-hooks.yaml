@@ -15,5 +15,5 @@
     args: []
     require_serial: true
     additional_dependencies:
-      - poetry >= "8.0",
+      - poetry>=8.0
       - poetry-plugin-export
