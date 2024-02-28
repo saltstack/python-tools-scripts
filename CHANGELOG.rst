@@ -13,6 +13,13 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.20.1 (2024-02-28)
+===================
+
+Added poetry as an extra, ie, `python -m pip install python-tools-scripts[poetry]`.
+Do note however that, if `poetry` is in path, the extra does not need to be provided.
+
+
 0.20.0 (2024-02-22)
 ===================
 
