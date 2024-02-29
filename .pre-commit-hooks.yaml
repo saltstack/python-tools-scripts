@@ -4,7 +4,7 @@
     language: python
     types: [file]
     args: []
-    require_serial: true
+    require_serial: false
     additional_dependencies: []
 
 -   id: tools-poetry
@@ -13,7 +13,6 @@
     language: python
     types: [file]
     args: []
-    require_serial: true
+    require_serial: false
     additional_dependencies:
       - poetry>=1.8.0
-      - poetry-plugin-export

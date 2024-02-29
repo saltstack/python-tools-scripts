@@ -13,6 +13,14 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.20.4 (2024-02-29)
+===================
+
+Fix the poetry support.
+Added a lockfile while setting up the virtual environments. This is specially important when
+using the tools as a pre-commit hook since on a clean system, we just one on of the invocations
+to setup the virtual environment, not all concurrent invocations.
+
 0.20.3 (2024-02-28)
 ===================
 

@@ -3,9 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 import pathlib
-import shutil
 import sys
-import tempfile
 from functools import cached_property
 from typing import TYPE_CHECKING
 
@@ -27,12 +25,16 @@ class _PipMixin(BaseModel):
     requirements: list[str] = Field(default_factory=list)
     requirements_files: list[pathlib.Path] = Field(default_factory=list)
     install_args: list[str] = Field(default_factory=list)
+    pip_requirement: str = Field(default="pip>=22.3.1,<23.0")
+    setuptools_requirement: str = Field(default="setuptools>=65.6.3,<66")
 
     def _get_config_hash(self) -> bytes:
         """
         Return a hash digest of the configuration.
         """
         config_hash = hashlib.sha256()
+        config_hash.update(self.pip_requirement.encode())
+        config_hash.update(self.setuptools_requirement.encode())
         for argument in self.install_args:
             config_hash.update(argument.encode())
         for requirement in sorted(self.requirements):
@@ -63,6 +65,22 @@ class _PipMixin(BaseModel):
             *args,
         )
 
+    def _setup_venv(self, ctx: Context, python_executable: str | None = None) -> None:
+        """
+        Setup the virtual environment.
+        """
+        if python_executable is None:
+            python_executable = sys.executable
+        ctx.info("Setting up virtual environment ...")
+        ctx.run(
+            python_executable,
+            "-m",
+            "pip",
+            "install",
+            self.pip_requirement,
+            self.setuptools_requirement,
+        )
+
 
 class _PoetryMixin(BaseModel):
     """
@@ -71,17 +89,16 @@ class _PoetryMixin(BaseModel):
 
     no_root: bool = Field(default=True)
     groups: list[str] = Field(default_factory=list)
-    export_args: list[str] = Field(default_factory=list)
     install_args: list[str] = Field(default_factory=list)
+    poetry_requirement: str = Field(default="poetry>=1.8.0")
 
     def _get_config_hash(self) -> bytes:
         """
         Return a hash of the configuration.
         """
         config_hash = hashlib.sha256()
+        config_hash.update(self.poetry_requirement.encode())
         config_hash.update(str(self.no_root).encode())
-        for argument in self.export_args:
-            config_hash.update(argument.encode())
         for argument in self.install_args:
             config_hash.update(argument.encode())
         for group in self.groups:
@@ -99,33 +116,39 @@ class _PoetryMixin(BaseModel):
         """
         if python_executable is None:
             python_executable = sys.executable
-        with tempfile.NamedTemporaryFile(prefix="reqs-", suffix=".txt") as tfile:
-            args: list[str] = []
-            if self.no_root is True:
-                param_name = "only"
-            else:
-                param_name = "with"
-            args.extend(f"--{param_name}={group}" for group in self.groups)
-            args.append(f"--output={tfile.name}")
-            poetry = shutil.which("poetry")
-            if poetry is None:
-                ctx.error("Did not find the 'poetry' binary in path")
-                ctx.exit(1)
-            ctx.info("Exporting requirements from poetry ...")
-            ctx.run(poetry, "export", *self.export_args, *args)
-            ctx.info("Installing requirements ...")
-            ctx.run(
-                python_executable,
-                "-m",
-                "pip",
-                "install",
-                *self.install_args,
-                "-r",
-                tfile.name,
-            )
+        args: list[str] = []
+        if self.no_root is True:
+            args.append("--no-root")
+        args.extend(f"--with={group}" for group in self.groups)
+        ctx.info("Installing requirements ...")
+        ctx.run(python_executable, "-m", "poetry", "install", *self.install_args, *args)
+
+    def _setup_venv(self, ctx: Context, python_executable: str | None = None) -> None:
+        """
+        Setup the virtual environment.
+        """
+        if python_executable is None:
+            python_executable = sys.executable
+        ctx.info("Setting up virtual environment ...")
+        ctx.run(
+            python_executable,
+            "-m",
+            "pip",
+            "install",
+            *self.install_args,
+            self.poetry_requirement,
+        )
 
 
-class DefaultConfig(BaseModel):
+class _LockTimeoutMixin(BaseModel):
+    """
+    Mixin class to provide the lock timeout field.
+    """
+
+    lock_timeout_seconds: int = Field(default=5 * 60)
+
+
+class DefaultConfig(_LockTimeoutMixin, BaseModel):
     """
     Default tools configuration model.
     """
@@ -139,6 +162,12 @@ class DefaultConfig(BaseModel):
     def _install(self, ctx: Context, python_executable: str | None = None) -> None:
         """
         Install default requirements.
+        """
+        raise NotImplementedError
+
+    def _setup_venv(self, ctx: Context, python_executable: str | None = None) -> None:
+        """
+        Setup the virtual environment.
         """
         raise NotImplementedError
 
@@ -177,6 +206,12 @@ class DefaultConfig(BaseModel):
         config_hash_file.write_text(self.config_hash)
         ctx.debug(f"Wrote '{config_hash_file}' with contents: '{self.config_hash}'")
 
+    def setup_venv(self, ctx: Context, python_executable: str | None = None) -> None:
+        """
+        Setup the virtual environment.
+        """
+        self._setup_venv(ctx, python_executable=python_executable)
+
 
 class DefaultPipConfig(_PipMixin, DefaultConfig):
     """
@@ -190,7 +225,7 @@ class DefaultPoetryConfig(_PoetryMixin, DefaultConfig):
     """
 
 
-class VirtualEnvConfig(BaseModel):
+class VirtualEnvConfig(_LockTimeoutMixin, BaseModel):
     """
     Virtualenv Configuration Typing.
     """
@@ -198,9 +233,6 @@ class VirtualEnvConfig(BaseModel):
     name: str = Field(default=None)
     env: dict[str, str] = Field(default=None)
     system_site_packages: bool = Field(default=False)
-    pip_requirement: str = Field(default="pip>=22.3.1,<23.0")
-    setuptools_requirement: str = Field(default="setuptools>=65.6.3,<66")
-    poetry_requirement: str = Field(default=">=1.7")
     add_as_extra_site_packages: bool = Field(default=False)
 
     def _get_config_hash(self) -> bytes:
@@ -212,6 +244,12 @@ class VirtualEnvConfig(BaseModel):
     def _install(self, ctx: Context, python_executable: str | None = None) -> None:
         """
         Install default requirements.
+        """
+        raise NotImplementedError
+
+    def _setup_venv(self, ctx: Context, python_executable: str | None = None) -> None:
+        """
+        Setup the virtual environment.
         """
         raise NotImplementedError
 
@@ -232,7 +270,13 @@ class VirtualEnvConfig(BaseModel):
         """
         Install requirements.
         """
-        return self._install(ctx, python_executable=python_executable)
+        self._install(ctx, python_executable=python_executable)
+
+    def setup_venv(self, ctx: Context, python_executable: str | None = None) -> None:
+        """
+        Setup the virtual environment.
+        """
+        self._setup_venv(ctx, python_executable=python_executable)
 
 
 class VirtualEnvPipConfig(_PipMixin, VirtualEnvConfig):

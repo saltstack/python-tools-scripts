@@ -2,4 +2,5 @@ attrs
 pydantic >= 2.0
 rich
 requests >= 2.31.0
+filelock
 typing-extensions; python_version < "3.11"

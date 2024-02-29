@@ -11,6 +11,7 @@ from subprocess import CompletedProcess
 from typing import TYPE_CHECKING
 
 import attr
+from filelock import FileLock
 
 if TYPE_CHECKING:
     import pathlib
@@ -34,6 +35,7 @@ class VirtualEnv:
     venv_python: pathlib.Path = attr.ib(init=False, repr=False)
     venv_bin_dir: pathlib.Path = attr.ib(init=False, repr=False)
     requirements_hash: str = attr.ib(init=False, repr=False)
+    lockfile: FileLock = attr.ib(init=False, repr=False)
 
     @venv_dir.default
     def _default_venv_dir(self) -> pathlib.Path:
@@ -64,6 +66,15 @@ class VirtualEnv:
     @requirements_hash.default
     def __default_requirements_hash(self) -> str:
         return self.config.get_config_hash()
+
+    @lockfile.default
+    def __lockfile(self) -> FileLock:
+        # Late import to avoid circular import errors
+        from ptscripts.__main__ import CWD
+
+        return FileLock(
+            CWD / f".venv-{self.config.name}.lock", timeout=self.config.lock_timeout_seconds
+        )
 
     def _install_requirements(self) -> None:
         requirements_hash_file = self.venv_dir / ".requirements.hash"
@@ -121,12 +132,7 @@ class VirtualEnv:
             relative_venv_path = self.venv_dir
         self.ctx.info(f"Creating virtualenv({self.config.name}) in {relative_venv_path}")
         self.run(*cmd, cwd=str(self.venv_dir.parent))
-        self.install(
-            "-U",
-            "wheel",
-            self.config.pip_requirement,
-            self.config.setuptools_requirement,
-        )
+        self.setup()
 
     def _add_as_extra_site_packages(self) -> None:
         if self.config.add_as_extra_site_packages is False:
@@ -162,10 +168,7 @@ class VirtualEnv:
             if path in sys.path:
                 sys.path.remove(path)
 
-    def __enter__(self) -> VirtualEnv:
-        """
-        Creates the virtual environment when entering context.
-        """
+    def _enter(self) -> VirtualEnv:
         try:
             self._create_virtualenv()
         except subprocess.CalledProcessError:
@@ -185,11 +188,28 @@ class VirtualEnv:
         self._add_as_extra_site_packages()
         return self
 
-    def __exit__(self, *args) -> None:
+    def _exit(self) -> None:
+        self._remove_extra_site_packages()
+
+    def __enter__(self) -> VirtualEnv:
+        """
+        Creates the virtual environment when entering context.
+        """
+        with self.lockfile:
+            return self._enter()
+
+    def __exit__(self, *_) -> None:
         """
         Exit the virtual environment context.
         """
-        self._remove_extra_site_packages()
+        with self.lockfile:
+            self._exit()
+
+    def setup(self) -> None:
+        """
+        Setup the virtual environment.
+        """
+        self.config.setup_venv(self.ctx, python_executable=str(self.venv_python))
 
     def install(self, *args: str, **kwargs) -> CompletedProcess[bytes]:
         """
