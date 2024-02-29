@@ -13,6 +13,11 @@ Backward incompatible (breaking) changes will only be introduced in major versio
 
 .. towncrier release notes start
 
+0.20.5 (2024-02-29)
+===================
+
+Change the path for lock files
+
 0.20.4 (2024-02-29)
 ===================
 

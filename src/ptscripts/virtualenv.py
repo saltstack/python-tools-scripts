@@ -70,10 +70,11 @@ class VirtualEnv:
     @lockfile.default
     def __lockfile(self) -> FileLock:
         # Late import to avoid circular import errors
-        from ptscripts.__main__ import CWD
+        from ptscripts.__main__ import TOOLS_VENVS_PATH
 
         return FileLock(
-            CWD / f".venv-{self.config.name}.lock", timeout=self.config.lock_timeout_seconds
+            TOOLS_VENVS_PATH / "locks" / f"{self.config.name}.lock",
+            timeout=self.config.lock_timeout_seconds,
         )
 
     def _install_requirements(self) -> None:
